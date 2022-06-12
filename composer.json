@@ -1,0 +1,42 @@
+{
+  "config": {
+    "platform": {
+      "php": "7.4"
+    }
+  },
+  "name": "ryunosuke/castella",
+  "description": "php dependency injection container",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "ryunosuke",
+      "email": "ryunosuke.arima@gmail.com"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "ryunosuke\\castella\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "ryunosuke\\Test\\": "tests/Test/"
+    }
+  },
+  "require": {
+    "php": ">=7.4",
+    "psr/container": "1.* || 2.*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "9.*",
+    "ryunosuke/phpunit-extension": "3.*"
+  },
+  "scripts": {
+    "build": [
+      "@composer test"
+    ],
+    "test": [
+      "vendor/bin/phpunit --configuration=tests/phpunit.xml"
+    ]
+  }
+}
