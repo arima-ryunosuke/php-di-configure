@@ -1,0 +1,13 @@
+<phpunit bootstrap="bootstrap.php" printerClass="\ryunosuke\PHPUnit\Printer\ProgressPrinter">
+    <testsuites>
+        <testsuite name="tests">
+            <directory>./Test/</directory>
+        </testsuite>
+    </testsuites>
+
+    <coverage>
+        <include>
+            <directory suffix=".php">../src</directory>
+        </include>
+    </coverage>
+</phpunit>
