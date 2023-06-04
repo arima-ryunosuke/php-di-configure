@@ -367,6 +367,7 @@ class ContainerTest extends AbstractTestCase
             'alias a1'       => [
                 'key a2' => 'value',
             ],
+            'NS\\sub\\'    => 'NS\\class'
         ]);
 
         $phpstorm_meta_php = sys_get_temp_dir() . '/phpstorm.meta.php';
@@ -384,6 +385,7 @@ class ContainerTest extends AbstractTestCase
             'alias.key'      => 'string',
             'a1'             => 'array',
             'a2'             => 'string',
+            'NS\\sub\\'      => 'string',
         ]);
 
         that($phpstorm_meta_php)->fileContainsAll(['PHPSTORM_META', 'closureclosure']);

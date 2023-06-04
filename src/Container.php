@@ -207,12 +207,12 @@ class Container implements ContainerInterface, ArrayAccess
                 META;
             }
             $qc = preg_quote($classname, '#');
-            file_put_contents($filename, preg_replace("#^\s*(// @codeInjectionStart:{$qc}).*?^\s*(// @codeInjectionEnd:{$qc})#smu", <<<META
-                $1
-                override({$classname}::get(0), map({$map}));
-                override(new {$classname}, map({$map}));
-                $2
-            META, $contents));
+            file_put_contents($filename, preg_replace_callback("#^\s*(// @codeInjectionStart:{$qc}).*?^\s*(// @codeInjectionEnd:{$qc})#smu", fn($m) => <<<META
+                    {$m[1]}
+                    override({$classname}::get(0), map({$map}));
+                    override(new {$classname}, map({$map}));
+                    {$m[2]}
+                META, $contents));
         }
         return $result;
     }
