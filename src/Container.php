@@ -22,6 +22,8 @@ use Throwable;
 
 class Container implements ContainerInterface, ArrayAccess
 {
+    private bool $including = false;
+
     private string  $delimiter;
     private bool    $autowiring;
     private bool    $constructorInjection;
@@ -98,7 +100,13 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function include(string $filename): self
     {
-        return $this->extends(require $filename);
+        $this->including = true;
+        try {
+            return $this->extends(require $filename);
+        }
+        finally {
+            $this->including = false;
+        }
     }
 
     public function set(string $id, $value): self
@@ -115,6 +123,10 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function get(string $id)
     {
+        if ($this->including) {
+            return static fn($c) => $c[$id];
+        }
+
         try {
             return $this->settle($id, $this->fetch($id));
         }

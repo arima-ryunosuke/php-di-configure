@@ -26,6 +26,7 @@ return [
         'driverOptions' => [
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
         ],
+        'loglevel'      => $this['env.loglevel']
     ],
     's3'       => [
         'config' => [

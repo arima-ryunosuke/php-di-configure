@@ -634,6 +634,7 @@ class ContainerTest extends AbstractTestCase
                 \PDO::ATTR_EMULATE_PREPARES  => false,
                 \PDO::ATTR_STRINGIFY_FETCHES => false,
             ],
+            'loglevel'      => LOG_DEBUG,
         ]);
 
         that($container['s3.config'])->is([
