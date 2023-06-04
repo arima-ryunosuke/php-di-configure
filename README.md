@@ -261,7 +261,21 @@ $container->extends([
 #### include(string $filename): self
 
 コンテナのコンテキストでファイルを読み込んで返り値を取り込みます。
-実質的に `$container->extends((fn() => include $filename)->call($container))` と同義です。
+実質的に `$container->extends((fn() => include $filename)->call($container))` とほぼ同義です。
+
+違いは `$this['entry']` が使える点です。
+include のコンテキストで `$this['entry']` のように直参照するとクロージャに変換され、参照時点で未定義でもその値が使用できます。
+つまり、下記の fuga と piyo は同義となります。
+
+```php
+<?php return [
+    'hoge' => 1,
+    'fuga' => $this['hoge'],
+    'piyo' => static fn($c) => $c['hoge'],
+];
+```
+
+自身のエントリを参照するわけなので、static 固定です。
 
 #### set(string $id, $value): self
 
@@ -433,6 +447,13 @@ $filename を与えるとそのファイルに `$container['hoge']` や `$contai
 MIT
 
 ## Release
+
+バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
+
+### 1.0.1
+
+- [feature] include のコンテキストで直参照するとクロージャとして扱われる機能
+- [fixbug] preg_replace でメタ文字が吹き飛んでいた不具合を修正
 
 ### 1.0.0
 
