@@ -385,7 +385,7 @@ class ContainerTest extends AbstractTestCase
             'alias a1'       => [
                 'key a2' => 'value',
             ],
-            'NS\\sub\\'    => 'NS\\class'
+            'NS\\sub\\'      => 'NS\\class',
         ]);
 
         $phpstorm_meta_php = sys_get_temp_dir() . '/phpstorm.meta.php';
@@ -628,17 +628,31 @@ class ContainerTest extends AbstractTestCase
         $container->include(__DIR__ . '/files/config2.php');
         $container->set(SplTempFileObject::class, $container->yield(SplTempFileObject::class));
 
-        that($container['env'])->is([
+        $env    = $container['env'];
+        $logger = $env['logger'];
+        unset($env['logger']);
+        that($logger->__debugInfo())->is([
+            "loglevel"  => "debug",
+            "directory" => "/var/log/app",
+        ]);
+        that($env)->is([
             'name'      => 'local',
             'origin'    => 'http://localhost',
-            'loglevel'  => LOG_DEBUG,
+            'loglevel'  => 'debug',
             'logdir'    => '/var/log/app',
             'rundir'    => '/var/run/app',
             'datadir'   => '/var/opt/app',
             'extension' => ['js'],
         ]);
 
-        that($container['database'])->is([
+        $database = $container['database'];
+        $logger   = $database['logger'];
+        unset($database['logger']);
+        that($logger->__debugInfo())->is([
+            "loglevel"  => "error",
+            "directory" => "/var/log/app",
+        ]);
+        that($database)->is([
             'driver'        => 'pdo_mysql',
             'host'          => '127.0.0.1',
             'port'          => 3306,
@@ -652,7 +666,7 @@ class ContainerTest extends AbstractTestCase
                 \PDO::ATTR_EMULATE_PREPARES  => false,
                 \PDO::ATTR_STRINGIFY_FETCHES => false,
             ],
-            'loglevel'      => LOG_DEBUG,
+            'loglevel'      => 'debug',
         ]);
 
         that($container['s3.config'])->is([
@@ -683,6 +697,10 @@ class ContainerTest extends AbstractTestCase
         that($container['storage.local1'])->isNotSame($container['storage.private']);
         that($container['storage.local2'])->isNotSame($container['storage.private']);
         that($container['storage.local3'])->isNotSame($container['storage.private']);
+
+        that($container['chain.x'])->isSame($container['chain.y']);
+        that($container['chain.y'])->isSame($container['chain.z']);
+        that($container['chain.z'])->isSame($container['chain.x']);
 
         $phpstorm_meta_php = __DIR__ . '/files/.phpstorm.meta.php';
         @unlink($phpstorm_meta_php);

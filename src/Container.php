@@ -141,7 +141,7 @@ class Container implements ContainerInterface, ArrayAccess
     public function get(string $id)
     {
         if ($this->including) {
-            return static fn($c) => $c[$id];
+            return new LazyValue(fn() => $this[$id]);
         }
 
         try {
@@ -322,6 +322,10 @@ class Container implements ContainerInterface, ArrayAccess
 
     private function factory(array $keys, $entry, ?bool &$dynamic = false)
     {
+        if ($entry instanceof LazyValue) {
+            $entry = $entry->___resolve();
+        }
+
         if (!$entry instanceof Closure) {
             return $entry;
         }

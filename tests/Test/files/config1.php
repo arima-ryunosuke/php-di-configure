@@ -8,11 +8,36 @@ return [
     'env'      => [
         'name'      => 'local',
         'origin'    => 'http://localhost',
-        'loglevel'  => LOG_INFO,
+        'loglevel'  => 'info',
         'logdir'    => '/var/log/app',
         'rundir'    => '/var/run/app',
         'datadir'   => '/var/opt/app',
         'extension' => ['js', 'es', 'ts'],
+        'logger'    => static fn($c) => new class ($c['env.loglevel'], $c['env.logdir']) {
+            private string $loglevel;
+            private string $directory;
+
+            public function __construct(string $loglevel, string $directory)
+            {
+                $this->loglevel  = $loglevel;
+                $this->directory = $directory;
+            }
+
+            public function __invoke($loglevel)
+            {
+                $that           = clone $this;
+                $that->loglevel = $loglevel;
+                return $that;
+            }
+
+            public function __debugInfo()
+            {
+                return [
+                    'loglevel'  => $this->loglevel,
+                    'directory' => $this->directory,
+                ];
+            }
+        },
     ],
     'database' => [
         'driver'        => 'pdo_mysql',
@@ -26,7 +51,7 @@ return [
         'driverOptions' => [
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
         ],
-        'loglevel'      => $this['env.loglevel']
+        'loglevel'      => $this['env.loglevel'],
     ],
     's3'       => [
         'config' => [
@@ -39,5 +64,9 @@ return [
         'private' => static fn($c, $keys) => new Storage($c['s3.client'], $keys[0]),
         'protect' => static fn($c, $keys) => new Storage($c['s3.client'], $keys[0]),
         'public'  => static fn($c, $keys) => new Storage($c['s3.client'], $keys[0]),
+    ],
+    'chain'    => [
+        'x' => new stdClass(),
+        'y' => $this['chain.x'],
     ],
 ];

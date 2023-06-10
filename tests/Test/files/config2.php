@@ -6,7 +6,7 @@
 
 return [
     'env'      => [
-        'loglevel'  => LOG_DEBUG,
+        'loglevel'  => 'debug',
         'extension' => $this->array(['js']),
     ],
     'database' => [
@@ -16,6 +16,7 @@ return [
             \PDO::ATTR_EMULATE_PREPARES  => false,
             \PDO::ATTR_STRINGIFY_FETCHES => false,
         ],
+        'logger'        => $this['env.logger']('error'),
     ],
     's3'       => [
         'config' => [
@@ -26,5 +27,8 @@ return [
         'local1' => $this->static(Storage::class, [1 => 'local1']),
         'local2' => static fn($c): Storage => $c->new(Storage::class, ['bucket' => 'local2']),
         'local3' => $this->static(Storage::class, [0 => $this->fn('s3.client')]),
+    ],
+    'chain'    => [
+        'z' => $this['chain.y'],
     ],
 ];
