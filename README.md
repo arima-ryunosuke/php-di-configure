@@ -450,6 +450,11 @@ MIT
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
 
+### 1.0.2
+
+- [feature] include のコンテキストで直参照すると遅延評価される機能
+- [feature] debugInfo を実装
+
 ### 1.0.1
 
 - [feature] include のコンテキストで直参照するとクロージャとして扱われる機能
