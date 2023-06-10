@@ -39,6 +39,7 @@ class ContainerTest extends AbstractTestCase
     function test___construct()
     {
         $container = new Container([
+            'debugInfo'            => null,
             'delimiter'            => '@',
             'autowiring'           => false,
             'constructorInjection' => false,
@@ -51,6 +52,23 @@ class ContainerTest extends AbstractTestCase
         that($container)->constructorInjection->is(false);
         that($container)->propertyInjection->is(false);
         that($container)->resolver->try(null)->is(123);
+
+        ob_start();
+        var_dump($container);
+        $var_dump = ob_get_clean();
+        that($var_dump)->stringContains('"entries":"ryunosuke\\castella\\Container":private');
+        that($var_dump)->stringContains('"settled":"ryunosuke\\castella\\Container":private');
+
+        $container = new Container([
+            'debugInfo' => 'settled',
+        ]);
+        $container->extends(['x' => 'Z']);
+
+        ob_start();
+        var_dump($container);
+        $var_dump = ob_get_clean();
+        that($var_dump)->stringContains('["x"]');
+        that($var_dump)->stringContains('string(1) "Z"');
     }
 
     function test_extend()

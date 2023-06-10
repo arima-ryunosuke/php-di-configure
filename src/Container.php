@@ -24,6 +24,7 @@ class Container implements ContainerInterface, ArrayAccess
 {
     private bool $including = false;
 
+    private ?string $debugInfo;
     private string  $delimiter;
     private bool    $autowiring;
     private bool    $constructorInjection;
@@ -39,6 +40,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function __construct(array $options = [])
     {
+        $this->debugInfo            = $options['debugInfo'] ?? null;
         $this->delimiter            = $options['delimiter'] ?? '.';
         $this->autowiring           = $options['autowiring'] ?? true;
         $this->constructorInjection = $options['constructorInjection'] ?? true;
@@ -47,6 +49,21 @@ class Container implements ContainerInterface, ArrayAccess
 
         $this->uninitializedObjects = new SplObjectStorage();
         $this->factoryClosures      = new SplObjectStorage();
+    }
+
+    public function __debugInfo()
+    {
+        // default var_dump
+        if ($this->debugInfo === null) {
+            return (array) $this;
+        }
+
+        // resolve all value
+        if ($this->debugInfo === 'settled') {
+            $this->get('');
+        }
+
+        return $this->{$this->debugInfo};
     }
 
     public function extends(array $values): self
