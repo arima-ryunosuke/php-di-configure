@@ -318,6 +318,37 @@ ArrayAccess が実装されており、配列ライクなアクセスも可能�
 
 ### ユーティリティ
 
+#### unset(): object
+
+最終結果からそのエントリを取り除きます。
+
+「親で定義されているが、子では取り除きたい」という状況で使用します。
+つまり、下記の設定の最終結果に `hoge` は含まれません。
+
+```php
+<?php
+$container->extends([
+    'array' => [
+        'hoge  => 'HOGE',
+        'fuga' => 'FUGA',
+        'nest' => [
+            'hoge  => 'HOGE',
+            'fuga' => 'FUGA',
+        ],
+    ],
+]);
+$container->extends([
+    'array' => [
+        'hoge  => $container->unset(),
+        'fuga' => 'FUGA',
+        'nest' => [
+            'hoge  => $container->unset(),
+            'fuga' => 'FUGA',
+        ],
+    ],
+]);
+```
+
 #### new(string $classname, array $arguments = []): object
 
 与えられたクラス名のインスタンスを生成します。
@@ -449,6 +480,10 @@ MIT
 ## Release
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
+
+### 1.0.3
+
+- [feature] 親の値を伏せる unset を実装
 
 ### 1.0.2
 
