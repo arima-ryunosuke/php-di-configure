@@ -228,6 +228,50 @@ class ContainerTest extends AbstractTestCase
         that($static3)->is($static1);
     }
 
+    function test_novalue()
+    {
+        $container = new Container();
+        $container->extends([
+            'unset' => $container->unset(),
+            'array' => [
+                'a'    => 'A',
+                'u'    => 'U',
+                'z'    => 'Z',
+                'nest' => [
+                    'a' => 'A',
+                    'u' => 'U',
+                    'z' => 'Z',
+                ],
+                'hash' => ['data'],
+            ],
+        ]);
+        $container->extends([
+            'array' => [
+                'a'    => 'A',
+                'u'    => $container->unset(),
+                'z'    => 'Z',
+                'nest' => [
+                    'a' => 'A',
+                    'u' => $container->unset(),
+                    'z' => 'Z',
+                ],
+                'hash' => $container->unset(),
+            ],
+        ]);
+
+        that($container->has('array.u'))->isFalse();
+        that($container->has('array.nest.u'))->isFalse();
+        that($container->has('array.hash'))->isFalse();
+        that($container->get('array'))->is([
+            "a"    => "A",
+            "z"    => "Z",
+            "nest" => [
+                "a" => "A",
+                "z" => "Z",
+            ],
+        ]);
+    }
+
     function test_new()
     {
         $container = new Container();
@@ -599,8 +643,9 @@ class ContainerTest extends AbstractTestCase
     {
         $container = new Container();
         $container->extends([
-            'array'  => [],
-            'scalar' => 123,
+            'unsetted-entry' => $container->unset(),
+            'array'          => [],
+            'scalar'         => 123,
         ]);
 
         that($container)->extends(['array' => null])->isThrowable('is not array');
@@ -613,6 +658,7 @@ class ContainerTest extends AbstractTestCase
         that(function () use ($container) { unset($container['scalar.hoge']); })()->isThrowable('is not support');
 
         that($container)->get('undefined-entry')->isThrowable('undefined config key');
+        that($container)->get('unsetted-entry')->isThrowable('unsetted config key');
 
         that($container)->get(NoneResolve::class)->isThrowable('in Required::__construct');
         $container[1] = new Required(1);

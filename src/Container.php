@@ -18,10 +18,14 @@ use ReflectionType;
 use ReflectionUnionType;
 use RuntimeException;
 use SplObjectStorage;
+use stdClass;
 use Throwable;
 
 class Container implements ContainerInterface, ArrayAccess
 {
+    /** future scope public const NOVALUE = new stdClass(); */
+    private static object $novalue;
+
     private bool $including = false;
 
     private ?string $debugInfo;
@@ -40,6 +44,8 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function __construct(array $options = [])
     {
+        self::$novalue ??= new stdClass();
+
         $this->debugInfo            = $options['debugInfo'] ?? null;
         $this->delimiter            = $options['delimiter'] ?? '.';
         $this->autowiring           = $options['autowiring'] ?? true;
@@ -98,7 +104,7 @@ class Container implements ContainerInterface, ArrayAccess
                 $current = [];
                 if (array_key_exists($key, $currents)) {
                     $current = $currents[$key];
-                    if ($is_mergable($current) xor $is_mergable($v)) {
+                    if ($v !== self::$novalue && ($is_mergable($current) xor $is_mergable($v))) {
                         throw self::newContainerException("%s is not array", $id);
                     }
                 }
@@ -167,6 +173,11 @@ class Container implements ContainerInterface, ArrayAccess
             }
             return false;
         }
+    }
+
+    public function unset(): object
+    {
+        return self::$novalue;
     }
 
     public function fn(string $id): Closure
@@ -284,6 +295,10 @@ class Container implements ContainerInterface, ArrayAccess
             $entry = $entry[$key];
         }
 
+        if ($entry === self::$novalue) {
+            throw self::newNotFoundException("unsetted config key '%s'", implode($this->delimiter, $keys));
+        }
+
         return $entry;
     }
 
@@ -298,6 +313,10 @@ class Container implements ContainerInterface, ArrayAccess
 
         if (is_array($entry)) {
             foreach ($entry as $key => $value) {
+                if ($value === self::$novalue) {
+                    unset($entry[$key]);
+                    continue;
+                }
                 $entry[$key] = $this->settle(strlen($id) ? $id . $this->delimiter . $key : $key, $value);
             }
         }
