@@ -168,6 +168,7 @@ return [
 
 ```php
 $container = new \ryunosuke\castella\Container([
+    'debugInfo'            => null,
     'delimiter'            => '.',
     'autowiring'           => true,
     'constructorInjection' => true,
@@ -175,6 +176,17 @@ $container = new \ryunosuke\castella\Container([
     'resolver'             => $container->resolve(...),
 ]);
 ```
+
+#### debugInfo: ?string
+
+`__debugInfo` の挙動を指定します。
+
+将来的な拡張のために string 型になっていますが、現在のところ null|"settled" の2拓です。
+null を与えると標準の var_dump（メンバーすべてが出る）になり、"settled" を与えるとエントリのみが出力されます。
+
+現在のデフォルトは null ですが、往々にして有用なのは "settled" のため、このデフォルト値は後々変更される可能性があります。
+また、このデフォルト値の変更は互換性の担保に含まれません。
+つまり「ob_start で var_dump の出力結果をキャプチャ」のような処理があると互換性が壊れる可能性があります。
 
 #### delimiter: string
 
@@ -264,7 +276,7 @@ $container->extends([
 実質的に `$container->extends((fn() => include $filename)->call($container))` とほぼ同義です。
 
 違いは `$this['entry']` が使える点です。
-include のコンテキストで `$this['entry']` のように直参照するとクロージャに変換され、参照時点で未定義でもその値が使用できます。
+include のコンテキストで `$this['entry']` のように直参照すると特殊な遅延評価オブジェクトに変換され、参照時点で未定義でもその値が使用できます。
 つまり、下記の fuga と piyo は同義となります。
 
 ```php
@@ -305,6 +317,16 @@ id は delimiter で潜ります。
 実質的に `fn() => $container->get($id)` と同義です。
 
 「まだ使うか分からないのでクロージャでラップして取得したい」といった場合の糖衣構文として使えます。
+
+#### MagicAccess
+
+プロパティのオーバーロードメソッドが実装されており、プロパティライクなアクセスも可能です。
+下記のように対応します。
+
+- isset($container->key) => $container->has('key')
+- $val = $container->key => $val = $container->get('key')
+- $container->key = $val => $container->set('key', $val)
+- unset($container->key) => 未サポート
 
 #### ArrayAccess
 
@@ -363,8 +385,8 @@ $container->extends([
 <?php return [
     'hoge_arg1' => 1,
     'hoge_arg2' => 2,
-    'hoge1'     => fn($c): Hoge => new Hoge($c['hoge_arg1'], $c['hoge_arg2']),
-    'hoge2'     => fn($c): Hoge => $c->new(Hoge::class),
+    'hoge1'     => new Hoge(1, 2),
+    'hoge2'     => $this->new(Hoge::class),
 ];
 ```
 
@@ -374,7 +396,6 @@ $container->extends([
 
 設定ファイル内でインスタンスを自動解決させるときの糖衣構文です。
 つまり、下記の hoge1 と hoge2 と hoge3 は同義となります。
-また、`$arguments` 内のクロージャは実行時に解決されるため、hoge3 の引数のクロージャは定義時点では呼び出されません。
 
 ```php
 <?php return [
@@ -382,20 +403,15 @@ $container->extends([
     'hoge_arg2' => 2,
     'hoge1'     => fn($c): Hoge => new Hoge($c['hoge_arg1'], $c['hoge_arg2']),
     'hoge2'     => $this->yield(Hoge::class),
-    'hoge3'     => $this->yield(Hoge::class, [1 => $this->fn('hoge_arg2')]),
+    'hoge3'     => $this->yield(Hoge::class, [1 => $this['hoge_arg2']]),
 ];
 ```
 
 Hoge クラスのコンストラクタ引数が $hoge_arg1 だったり、 $hoge_arg2 が型付きで自動解決できる場合はこのような記述で Hoge インスタンスが（遅延）生成されます。
 hoge3 は yield を使いつつ引数の遅延実行しています。
-hoge3 はクロージャに囲まれておらず、設定ファイルのコンテキストで実行されるため、このようにクロージャ化しないと未定義もしくはエラーとなります。
 
 このように依存関係が完全に閉じているなら yield を使用して自動に任せたほうが楽なこともあるでしょう。
 また、個人的に返り値の Hoge 宣言を忘れることが多いです。返り値の型なしのクロージャは依存関係解決の対象外となるため、この記法は「単純にその型のインスタンスが欲しい」場合に有用です。
-
-注意点として「特定の返り値型を持つクロージャ」を静的に定義するのが不可能なため、内部的には eval での実装になっています。
-特に値の検証も行っていないため、 $classname に外部由来の値を与えるのは絶対にやめてください。
-あと eval だと20倍近く速度差があるけど…まぁそんなに呼ばないと思うので大丈夫でしょう（100回書いても1ms未満なので常識の範囲内なら誤差レベル）。
 
 #### static(string $classname, array $arguments = []): Closure
 
@@ -452,6 +468,14 @@ hoge3 はクロージャに囲まれておらず、設定ファイルのコン�
 $filename を与えるとそのファイルに `$container['hoge']` や `$container->get('hoge')` でコード補完が効くようになりかつ型を活かすことができるような map 配列が書き出されます。
 返り値として名前の型配列を返します。
 
+#### typehint(?string $filename): array
+
+設定されている実際の型のプロパティを持ったクラス定義を吐き出します。
+
+この機能は開発支援機能なので遅延クロージャはすべて解決されます。本運用時に呼ぶことは想定されていません。
+$filename を与えるとそのファイルに `$container->hoge` でコード補完が効くようになりかつ型を活かすことができるようなクラス定義が書き出されます。
+返り値として名前の型配列を返します。
+
 #### dump(string $id = ''): string
 
 設定されている実際の型を元に指定 id をダンプします。
@@ -480,6 +504,13 @@ MIT
 ## Release
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
+
+### 1.0.4
+
+- [tests] lazy アクセスの導入で yield の fn が要らなくなっているはずなのでテストケースを追加
+- [refactor] eval を廃止してメタデータとして持たせるようにする
+- [feature] マジックアクセスとそのタイプヒント出力機能
+- [fixbug] クラス名が完全修飾になっていない不具合を修正
 
 ### 1.0.3
 
