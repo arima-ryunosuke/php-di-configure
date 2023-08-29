@@ -72,6 +72,30 @@ class Container implements ContainerInterface, ArrayAccess
         return $this->{$this->debugInfo};
     }
 
+    #<editor-fold desc="MagicAccess">
+
+    public function __isset($name)
+    {
+        return $this->has($name);
+    }
+
+    public function __get($name)
+    {
+        return $this->get($name);
+    }
+
+    public function __set($name, $value)
+    {
+        $this->set($name, $value);
+    }
+
+    public function __unset($name)
+    {
+        throw self::newContainerException('__unset is not support');
+    }
+
+    #</editor-fold>
+
     public function extends(array $values): self
     {
         // closures that return array are also allowed to merge
@@ -253,6 +277,41 @@ class Container implements ContainerInterface, ArrayAccess
                     override(new {$classname}, map({$map}));
                     {$m[2]}
                 META, $contents));
+        }
+        return $result;
+    }
+
+    public function typehint(?string $filename = null): array
+    {
+        $result = [];
+        foreach ($this->get('') as $k => $v) {
+            $result[$k] = self::getTypeName($v);
+        }
+
+        foreach ($this->aliases as $alias => $id) {
+            $result[$alias] = self::getTypeName($this->get($id));
+        }
+
+        if ($filename !== null) {
+            $parts      = explode('\\', get_class($this));
+            $classname  = array_pop($parts);
+            $namespace  = implode('\\', $parts);
+            $properties = '';
+            foreach ($result as $name => $type) {
+                if ($type === 'array') {
+                    $properties .= "    /** @var " . self::getArrayType($this->get($name)) . " */\n";
+                }
+                if ($type === 'resource') {
+                    $properties .= "    /** @var resource */\n";
+                }
+
+                $rtype = "$type ";
+                if (in_array($type, ['resource', 'unknown'], true)) {
+                    $rtype = '';
+                }
+                $properties .= "    public $rtype$$name;\n";
+            }
+            file_put_contents($filename, "<?php\nnamespace $namespace;\n\nclass $classname\n{\n$properties}\n");
         }
         return $result;
     }
@@ -559,6 +618,27 @@ class Container implements ContainerInterface, ArrayAccess
             default:
                 return 'unknown'; // @codeCoverageIgnore
         }
+    }
+
+    private static function getArrayType(array $value): string
+    {
+        if (!$value) {
+            return 'array';
+        }
+
+        $result = [];
+        $types  = [];
+        foreach ($value as $k => $v) {
+            $typename         = is_array($v) ? self::getArrayType($v) : self::getTypeName($v);
+            $types[$typename] = true;
+            $result[]         = "$k: $typename";
+        }
+
+        if (count($types) === 1 && $value === array_values($value)) {
+            return 'array<' . array_key_first($types) . '>';
+        }
+
+        return 'array{' . implode(', ', $result) . '}';
     }
 
     private static function describeValue($value, int $nest = 0): string

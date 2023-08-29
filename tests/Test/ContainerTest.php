@@ -161,7 +161,51 @@ class ContainerTest extends AbstractTestCase
         that($container['array'])->is(['key2' => 'val4']);
     }
 
-    function test_access()
+    function test_magicaccess()
+    {
+        $container = new Container();
+        $container->extends([
+            'int'     => 42,
+            'float'   => 3.14,
+            'string'  => 'message',
+            'array'   => [
+                'hoge' => 'HOGE',
+            ],
+            'object'  => (object) [
+                'fuga' => 'FUGA',
+            ],
+            'closure' => [
+                'closureX' => fn($c, $keys) => fn($string) => implode('-', $keys) . ':' . strtoupper($string),
+            ],
+        ]);
+        $container->{'array.piyo'} = 'PIYO';
+
+        that($container->int)->is(42);
+        that($container->float)->is(3.14);
+        that($container->string)->is('message');
+        that($container->array)->is(['hoge' => 'HOGE', 'piyo' => 'PIYO']);
+        that($container->{'array.hoge'})->is('HOGE');
+        that($container->object)->is((object) ['fuga' => 'FUGA']);
+        that(($container->{'closure.closureX'})('hoge'))->is('closureX-closure:HOGE');
+        that($container->has('array.hoge'))->isTrue();
+
+        that(isset($container->{'array.piyo'}))->isTrue();
+        that($container->has('array.piyo'))->isTrue();
+        that($container->{'array.piyo'})->is('PIYO');
+        that($container->get('array.piyo'))->is('PIYO');
+
+        $container->append = ['ARRAY'];
+        that(isset($container->append))->isTrue();
+        that($container->has('append'))->isTrue();
+        that($container->append)->is(['ARRAY']);
+        that($container->get('append'))->is(['ARRAY']);
+        that($container->{'append.0'})->is('ARRAY');
+        that($container->get('append.0'))->is('ARRAY');
+
+        that($container->fn('array.hoge'))->isInstanceOf(Closure::class)()->is('HOGE');
+    }
+
+    function test_arrayaccess()
     {
         $container = new Container();
         $container->extends([
@@ -453,6 +497,56 @@ class ContainerTest extends AbstractTestCase
         that($phpstorm_meta_php)->fileContainsAll(['PHPSTORM_META', 'closureclosure']);
     }
 
+    function test_typehint()
+    {
+        $container = new Container();
+        $container->extends([
+            'int'            => 42,
+            'float'          => 3.14,
+            'string'         => 'message',
+            'array'          => [
+                'hoge'  => 'HOGE',
+                'list'  => [new stdClass(), new stdClass(), new stdClass()],
+                'hash'  => ['a' => new stdClass(), 'b' => new stdClass()],
+                'empty' => [],
+            ],
+            'object'         => (object) [
+                'fuga' => 'FUGA',
+            ],
+            'closure'        => fn(): ArrayAccess => new ArrayObject([1, 2, 3]),
+            'closureclosure' => fn() => fn($string) => strtoupper($string),
+            'resource'       => STDOUT,
+            'alias a1'       => [
+                'key a2' => 'value',
+            ],
+        ]);
+
+        $typehint_php = sys_get_temp_dir() . '/typehint.php';
+        that($container->typehint($typehint_php))->is([
+            'int'            => 'int',
+            'float'          => 'float',
+            'string'         => 'string',
+            'array'          => 'array',
+            'object'         => '\\stdClass',
+            'closure'        => '\\ArrayObject',
+            'closureclosure' => '\\Closure',
+            'resource'       => 'resource',
+            'alias'          => 'array',
+            'a1'             => 'array',
+            'a2'             => 'string',
+        ]);
+
+        that($typehint_php)->fileContainsAll([
+            '/** @var array{hoge: string, list: array<\\stdClass>, hash: array{a: \\stdClass, b: \\stdClass}, empty: array} */',
+            'public array $array;',
+            'public \\stdClass $object;',
+            'public \\Closure $closureclosure;',
+            '/** @var resource */',
+            'public $resource;',
+            'public array $a1;',
+        ]);
+    }
+
     function test_dump()
     {
         $container = new Container();
@@ -656,6 +750,7 @@ class ContainerTest extends AbstractTestCase
         that($container)->set('scalar', 'changed')->isThrowable('is already settled');
 
         that(function () use ($container) { unset($container['scalar.hoge']); })()->isThrowable('is not support');
+        that(function () use ($container) { unset($container->{'scalar.hoge'}); })()->isThrowable('is not support');
 
         that($container)->get('undefined-entry')->isThrowable('undefined config key');
         that($container)->get('unsetted-entry')->isThrowable('unsetted config key');
