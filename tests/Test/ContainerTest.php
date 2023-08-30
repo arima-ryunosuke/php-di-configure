@@ -440,9 +440,9 @@ class ContainerTest extends AbstractTestCase
             'string'         => 'string',
             'array'          => 'array',
             'array.hoge'     => 'string',
-            'object'         => 'stdClass',
-            'closure'        => 'ArrayObject',
-            'closureclosure' => 'Closure',
+            'object'         => '\\stdClass',
+            'closure'        => '\\ArrayObject',
+            'closureclosure' => '\\Closure',
             'alias'          => 'array',
             'alias.key'      => 'string',
             'a1'             => 'array',
@@ -599,12 +599,12 @@ class ContainerTest extends AbstractTestCase
         that(Container::class)::getTypeName('hoge')->is('string');
         that(Container::class)::getTypeName([null, 123, 3.14, 'hoge'])->is('array');
 
-        that(Container::class)::getTypeName(new ArrayObject())->is(ArrayObject::class);
-        that(Container::class)::getTypeName(new Container())->is(Container::class);
+        that(Container::class)::getTypeName(new ArrayObject())->is('\\' . ArrayObject::class);
+        that(Container::class)::getTypeName(new Container())->is('\\' . Container::class);
         that(Container::class)::getTypeName(new class { })->is('object');
-        that(Container::class)::getTypeName(new class implements Stringable { use StringableCountable; })->is('Stringable');
-        that(Container::class)::getTypeName(new class extends ArrayObject implements Stringable { use StringableCountable; })->is('ArrayObject|Stringable');
-        that(Container::class)::getTypeName(new class extends UnexpectedValueException implements Countable { use StringableCountable; })->is('UnexpectedValueException|Countable');
+        that(Container::class)::getTypeName(new class implements Stringable { use StringableCountable; })->is('\\Stringable');
+        that(Container::class)::getTypeName(new class extends ArrayObject implements Stringable { use StringableCountable; })->is('\\ArrayObject|\\Stringable');
+        that(Container::class)::getTypeName(new class extends UnexpectedValueException implements Countable { use StringableCountable; })->is('\\UnexpectedValueException|\\Countable');
 
         $fp = tmpfile();
         that(Container::class)::getTypeName($fp)->is('resource');

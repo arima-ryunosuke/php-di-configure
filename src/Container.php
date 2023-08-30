@@ -541,7 +541,7 @@ class Container implements ContainerInterface, ArrayAccess
                 return 'array';
             case 'object':
                 if (!(new ReflectionClass($value))->isAnonymous()) {
-                    return get_class($value);
+                    return '\\' . get_class($value);
                 }
                 $types = class_parents($value) + class_implements($value);
                 foreach ($types as $type1) {
@@ -552,7 +552,7 @@ class Container implements ContainerInterface, ArrayAccess
                     }
                 }
                 // @see https://www.jetbrains.com/help/phpstorm/ide-advanced-metadata.html#using-union-types
-                return implode('|', $types) ?: 'object';
+                return implode('|', array_map(fn($v) => "\\$v", $types)) ?: 'object';
             case 'resource':
             case 'resource (closed)':
                 return 'resource';
