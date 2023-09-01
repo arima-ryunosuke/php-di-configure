@@ -318,7 +318,8 @@ class ContainerTest extends AbstractTestCase
 
     function test_new()
     {
-        $container = new Container();
+        $container                  = new Container();
+        that($container)->including = true;
         $container->extends([
             's3'  => [
                 'config' => [
@@ -327,8 +328,10 @@ class ContainerTest extends AbstractTestCase
             ],
             'ex'  => $container->static(Exception::class, ['code' => 123, 0 => 'hoge', 2 => null]),
             'ex2' => $container->yield(Exception::class, ['code' => 456, 0 => 'fuga', 2 => $container->fn('ex')]),
+            'ex3' => $container->yield(Exception::class, ['code' => 456, 0 => 'fuga', 2 => $container['ex']]),
             'ao'  => $ao = new ArrayObject(),
         ]);
+        that($container)->including = false;
 
         that($container->has('S3Client'))->isTrue();
         that($container->has('MyS3Client'))->isFalse();
@@ -345,6 +348,10 @@ class ContainerTest extends AbstractTestCase
         that($container->get('ex2')->getCode())->is(456);
         that($container->get('ex2')->getMessage())->is('fuga');
         that($container->get('ex2')->getPrevious())->isSame($container->get('ex'));
+
+        that($container->get('ex3')->getCode())->is(456);
+        that($container->get('ex3')->getMessage())->is('fuga');
+        that($container->get('ex3')->getPrevious())->isSame($container->get('ex'));
 
         that($container->get('ex'))->is($container->get('ex'));
         that($container->get('ex2'))->isNotSame($container->get('ex2'));
