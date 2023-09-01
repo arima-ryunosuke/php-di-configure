@@ -36,7 +36,7 @@ class Container implements ContainerInterface, ArrayAccess
     private Closure $resolver;
 
     private SplObjectStorage $uninitializedObjects;
-    private SplObjectStorage $factoryClosures;
+    private SplObjectStorage $closureMetadata;
 
     private array $entries = [];
     private array $settled = [];
@@ -54,7 +54,7 @@ class Container implements ContainerInterface, ArrayAccess
         $this->resolver             = Closure::bind(Closure::fromCallable($options['resolver'] ?? [$this, 'resolve']), $this, $this);
 
         $this->uninitializedObjects = new SplObjectStorage();
-        $this->factoryClosures      = new SplObjectStorage();
+        $this->closureMetadata      = new SplObjectStorage();
     }
 
     public function __debugInfo()
@@ -98,18 +98,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function extends(array $values): self
     {
-        // closures that return array are also allowed to merge
-        $is_mergable = function ($value): bool {
-            if ($value instanceof Closure) {
-                $type = (new ReflectionFunction($value))->getReturnType();
-                if ($type && $type instanceof ReflectionNamedType && $type->getName() === 'array') {
-                    return true;
-                }
-            }
-            return is_array($value);
-        };
-
-        $extends = function (array $currents, array $array, array $keys) use (&$extends, $is_mergable) {
+        $extends = function (array $currents, array $array, array $keys) use (&$extends) {
             foreach ($array as $k => $v) {
                 [$key, $alias] = preg_split('#\s#', $k, 2, PREG_SPLIT_NO_EMPTY) + [1 => null];
 
@@ -128,7 +117,8 @@ class Container implements ContainerInterface, ArrayAccess
                 $current = [];
                 if (array_key_exists($key, $currents)) {
                     $current = $currents[$key];
-                    if ($v !== self::$novalue && ($is_mergable($current) xor $is_mergable($v))) {
+                    // closures that return array are also allowed to merge
+                    if ($v !== self::$novalue && ($this->getValueType($current) === 'array' xor $this->getValueType($v) === 'array')) {
                         throw self::newContainerException("%s is not array", $id);
                     }
                 }
@@ -216,14 +206,22 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function yield(string $classname, array $arguments = []): Closure
     {
-        assert(class_exists($classname) && is_array($arguments));
-        return eval("return fn(\$c): $classname => \$c->instance(\$classname, \$arguments, false);");
+        $closure = fn($c) => $c->instance($classname, $arguments, false);
+        $this->closureMetadata->attach($closure, (object) [
+            'dynamic'    => true,
+            'returnType' => ltrim($classname, '\\'),
+        ]);
+        return $closure;
     }
 
     public function static(string $classname, array $arguments = []): Closure
     {
-        assert(class_exists($classname) && is_array($arguments));
-        return eval("return static fn(\$c): $classname => \$c->instance(\$classname, \$arguments, false);");
+        $closure = static fn($c) => $c->instance($classname, $arguments, false);
+        $this->closureMetadata->attach($closure, (object) [
+            'dynamic'    => false,
+            'returnType' => ltrim($classname, '\\'),
+        ]);
+        return $closure;
     }
 
     public function callable(callable $entry): Closure
@@ -256,7 +254,7 @@ class Container implements ContainerInterface, ArrayAccess
         }
 
         if ($filename !== null) {
-            $map       = self::describeValue($result, 1);
+            $map       = $this->describeValue($result, 1);
             $classname = '\\' . get_class($this);
             $contents  = file_exists($filename) ? file_get_contents($filename) : '';
             if (strpos($contents, 'namespace PHPSTORM_META') === false) {
@@ -331,7 +329,7 @@ class Container implements ContainerInterface, ArrayAccess
             }
             return $entry;
         };
-        return self::describeValue($withalias($this->get($id), []));
+        return $this->describeValue($withalias($this->get($id), []));
     }
 
     private function fetch(string $id)
@@ -408,15 +406,14 @@ class Container implements ContainerInterface, ArrayAccess
             return $entry;
         }
 
-        if ($this->factoryClosures->contains($entry)) {
-            [$dynamic, $result] = $this->factoryClosures[$entry];
-            return $dynamic ? $entry($this, $keys) : $result;
+        $metadata = $this->closureMetadata[$entry] ??= (object) [];
+
+        $dynamic = $metadata->dynamic ??= !!@$entry->bindTo($this);
+        if (!$dynamic && property_exists($metadata, 'result')) {
+            return $metadata->result;
         }
 
-        $dynamic = !!@$entry->bindTo($this);
-        $result  = $entry($this, $keys);
-        $this->factoryClosures->attach($entry, [$dynamic, $result]);
-        return $result;
+        return $metadata->result = $entry($this, $keys);
     }
 
     private function instance(string $classname, array $arguments, bool $initialize): object
@@ -492,11 +489,8 @@ class Container implements ContainerInterface, ArrayAccess
             if (array_key_exists($id, $this->settled) && is_object($this->settled[$id])) {
                 return get_class($this->settled[$id]);
             }
-            if ($entry instanceof Closure) {
-                return (new ReflectionFunction($entry))->getReturnType();
-            }
             if (is_object($entry)) {
-                return get_class($entry);
+                return $this->getValueType($entry);
             }
             return null;
         };
@@ -538,6 +532,83 @@ class Container implements ContainerInterface, ArrayAccess
         catch (NotFoundExceptionInterface $e) {
             throw self::newContainerException($message());
         }
+    }
+
+    private function getValueType($value, bool $withNullable = false): string
+    {
+        if ($value instanceof Closure) {
+            if (isset($this->closureMetadata[$value]->returnType)) {
+                return $this->closureMetadata[$value]->returnType;
+            }
+            $type = (new ReflectionFunction($value))->getReturnType();
+            if ($type instanceof ReflectionNamedType) {
+                if ($withNullable && $type->allowsNull()) {
+                    return '?' . $type->getName();
+                }
+                return $type->getName();
+            }
+            // @todo ReflectionUnionType, ReflectionIntersectionType
+            return 'void';
+        }
+        if (is_object($value)) {
+            return get_class($value);
+        }
+        return self::getTypeName($value);
+    }
+
+    private function describeValue($value, int $nest = 0): string
+    {
+        $objects  = [];
+        $describe = function ($value, $nest = 0) use (&$describe, &$objects) {
+            if (is_array($value)) {
+                if (!$value) {
+                    return '[]';
+                }
+
+                $indent = str_repeat(' ', ($nest + 1) * 4);
+                $keys   = array_map($describe, array_combine($keys = array_keys($value), $keys));
+                $maxlen = max(array_map('strlen', $keys));
+                $kvl    = "\n";
+                foreach ($value as $k => $v) {
+                    $kvl .= $indent . sprintf("%-{$maxlen}s => %s,\n", $keys[$k], $describe($v, $nest + 1));
+                }
+                return sprintf("[%s%s]", $kvl, str_repeat(' ', $nest * 4));
+            }
+            if ($value instanceof Closure) {
+                $reffunc = new ReflectionFunction($value);
+                $typestr = fn(ReflectionType $type) => @((version_compare(PHP_VERSION, 8.0) < 0 && $type->allowsNull() ? '?' : '') . $type);
+                $params  = [];
+                foreach ($reffunc->getParameters() as $parameter) {
+                    $params[] = implode('', [
+                        $parameter->hasType() ? $typestr($parameter->getType()) . ' ' : '',
+                        $parameter->isPassedByReference() ? '&' : '',
+                        $parameter->isVariadic() ? '...$' : '$',
+                        $parameter->getName(),
+                        $parameter->isDefaultValueAvailable() ? ' = ' . $describe($parameter->getDefaultValue(), $nest + 1) : '',
+                    ]);
+                }
+                return sprintf('function (%s): %s {%s#%d~%d}',
+                    implode(', ', $params),
+                    $this->getValueType($value, true),
+                    $reffunc->getFileName(),
+                    $reffunc->getStartLine(),
+                    $reffunc->getEndLine(),
+                );
+            }
+            if (is_object($value)) {
+                $oid = get_class($value) . '#' . spl_object_id($value);
+                if (isset($objects[$oid])) {
+                    return sprintf('%s {%s}', $oid, $objects[$oid]);
+                }
+                $objects[$oid] = "...";
+
+                $vars = get_mangled_object_vars($value);
+                $keys = array_map(fn($key) => substr(strrchr("\0$key", "\0"), 1), array_keys($vars));
+                return sprintf('%s {%s}', $oid, substr($describe(array_combine($keys, $vars), $nest), 1, -1));
+            }
+            return var_export($value, true);
+        };
+        return $describe($value, $nest);
     }
 
     private static function matchReflectionType($type, ReflectionType $targetType): bool
@@ -639,61 +710,6 @@ class Container implements ContainerInterface, ArrayAccess
         }
 
         return 'array{' . implode(', ', $result) . '}';
-    }
-
-    private static function describeValue($value, int $nest = 0): string
-    {
-        $objects  = [];
-        $describe = function ($value, $nest = 0) use (&$describe, &$objects) {
-            if (is_array($value)) {
-                if (!$value) {
-                    return '[]';
-                }
-
-                $indent = str_repeat(' ', ($nest + 1) * 4);
-                $keys   = array_map($describe, array_combine($keys = array_keys($value), $keys));
-                $maxlen = max(array_map('strlen', $keys));
-                $kvl    = "\n";
-                foreach ($value as $k => $v) {
-                    $kvl .= $indent . sprintf("%-{$maxlen}s => %s,\n", $keys[$k], $describe($v, $nest + 1));
-                }
-                return sprintf("[%s%s]", $kvl, str_repeat(' ', $nest * 4));
-            }
-            if ($value instanceof Closure) {
-                $reffunc = new ReflectionFunction($value);
-                $typestr = fn(ReflectionType $type) => @((version_compare(PHP_VERSION, 8.0) < 0 && $type->allowsNull() ? '?' : '') . $type);
-                $params  = [];
-                foreach ($reffunc->getParameters() as $parameter) {
-                    $params[] = implode('', [
-                        $parameter->hasType() ? $typestr($parameter->getType()) . ' ' : '',
-                        $parameter->isPassedByReference() ? '&' : '',
-                        $parameter->isVariadic() ? '...$' : '$',
-                        $parameter->getName(),
-                        $parameter->isDefaultValueAvailable() ? ' = ' . $describe($parameter->getDefaultValue(), $nest + 1) : '',
-                    ]);
-                }
-                return sprintf('function (%s): %s {%s#%d~%d}',
-                    implode(', ', $params),
-                    $reffunc->hasReturnType() ? $typestr($reffunc->getReturnType()) : 'void',
-                    $reffunc->getFileName(),
-                    $reffunc->getStartLine(),
-                    $reffunc->getEndLine(),
-                );
-            }
-            if (is_object($value)) {
-                $oid = get_class($value) . '#' . spl_object_id($value);
-                if (isset($objects[$oid])) {
-                    return sprintf('%s {%s}', $oid, $objects[$oid]);
-                }
-                $objects[$oid] = "...";
-
-                $vars = get_mangled_object_vars($value);
-                $keys = array_map(fn($key) => substr(strrchr("\0$key", "\0"), 1), array_keys($vars));
-                return sprintf('%s {%s}', $oid, substr($describe(array_combine($keys, $vars), $nest), 1, -1));
-            }
-            return var_export($value, true);
-        };
-        return $describe($value, $nest);
     }
 
     private static function newContainerException(string $message, ...$args): ContainerExceptionInterface

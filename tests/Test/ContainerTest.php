@@ -639,6 +639,48 @@ class ContainerTest extends AbstractTestCase
         that($container)->resolve($mock('', [I1::class, I7::class]))->isSame($container->get('mixobject'));
     }
 
+    function test_getValueType()
+    {
+        $container = new Container();
+
+        that($container)->getValueType(123)->is('int');
+        that($container)->getValueType([1, 2, 3])->is('array');
+        that($container)->getValueType(new stdClass())->is(stdClass::class);
+        that($container)->getValueType(fn(): int => 123)->is('int');
+        that($container)->getValueType(fn(): array => [1, 2, 3])->is('array');
+        that($container)->getValueType(fn() => null)->is('void');
+        that($container)->getValueType($container->yield(stdClass::class))->is('stdClass');
+        that($container)->getValueType($container->static(stdClass::class))->is('stdClass');
+    }
+
+    function test_describeValue()
+    {
+        $container = new Container();
+        that($container)->describeValue([
+            'empty' => [],
+            'a'     => [
+                'b' => [
+                    'c' => 'xyz',
+                ],
+            ],
+        ], 2)->is("[
+            'empty' => [],
+            'a'     => [
+                'b' => [
+                    'c' => 'xyz',
+                ],
+            ],
+        ]");
+
+        that($container)->describeValue(fn($arg) => [])->stringStartsWith('function ($arg): void ');
+        that($container)->describeValue(fn(array $arg = null): ?array => [])->stringStartsWith('function (?array $arg = NULL): ?array ');
+        that($container)->describeValue(fn(?array &...$args): ?array => [])->stringStartsWith('function (?array &...$args): ?array ');
+
+        $object = new stdClass();
+        $id     = spl_object_id($object);
+        that($container)->describeValue([$object, $object])->stringContains("stdClass#$id {...}");
+    }
+
     function test_matchReflectionType()
     {
         that(Container::class)::matchReflectionType(null, self::getReflectionType(I1::class))->isFalse();
@@ -704,33 +746,6 @@ class ContainerTest extends AbstractTestCase
         that(Container::class)::getTypeName($fp)->is('resource');
         fclose($fp);
         that(Container::class)::getTypeName($fp)->is('resource');
-    }
-
-    function test_describeValue()
-    {
-        that(Container::class)::describeValue([
-            'empty' => [],
-            'a'     => [
-                'b' => [
-                    'c' => 'xyz',
-                ],
-            ],
-        ], 2)->is("[
-            'empty' => [],
-            'a'     => [
-                'b' => [
-                    'c' => 'xyz',
-                ],
-            ],
-        ]");
-
-        that(Container::class)::describeValue(fn($arg) => [])->stringStartsWith('function ($arg): void ');
-        that(Container::class)::describeValue(fn(array $arg = null): ?array => [])->stringStartsWith('function (?array $arg = NULL): ?array ');
-        that(Container::class)::describeValue(fn(?array &...$args): ?array => [])->stringStartsWith('function (?array &...$args): ?array ');
-
-        $object = new stdClass();
-        $id     = spl_object_id($object);
-        that(Container::class)::describeValue([$object, $object])->stringContains("stdClass#$id {...}");
     }
 
     function test_exception()
