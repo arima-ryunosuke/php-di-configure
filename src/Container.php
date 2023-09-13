@@ -702,9 +702,14 @@ class Container implements ContainerInterface, ArrayAccess
         $result = [];
         $types  = [];
         foreach ($value as $k => $v) {
+            $key = addslashes($k);
+            if ($key !== $k) {
+                $key = "\"$key\"";
+            }
+
             $typename         = is_array($v) ? self::getArrayType($v) : self::getTypeName($v);
             $types[$typename] = true;
-            $result[]         = "$k: $typename";
+            $result[]         = "$key: $typename";
         }
 
         if (count($types) === 1 && $value === array_values($value)) {

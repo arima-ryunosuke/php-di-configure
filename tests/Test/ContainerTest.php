@@ -512,10 +512,11 @@ class ContainerTest extends AbstractTestCase
             'float'          => 3.14,
             'string'         => 'message',
             'array'          => [
-                'hoge'  => 'HOGE',
-                'list'  => [new stdClass(), new stdClass(), new stdClass()],
-                'hash'  => ['a' => new stdClass(), 'b' => new stdClass()],
-                'empty' => [],
+                'hoge'      => 'HOGE',
+                'list'      => [new stdClass(), new stdClass(), new stdClass()],
+                'hash'      => ['a' => new stdClass(), 'b' => new stdClass()],
+                'empty'     => [],
+                'NS\\sub\\' => 'quote',
             ],
             'object'         => (object) [
                 'fuga' => 'FUGA',
@@ -544,7 +545,7 @@ class ContainerTest extends AbstractTestCase
         ]);
 
         that($typehint_php)->fileContainsAll([
-            '/** @var array{hoge: string, list: array<\\stdClass>, hash: array{a: \\stdClass, b: \\stdClass}, empty: array} */',
+            '/** @var array{hoge: string, list: array<\\stdClass>, hash: array{a: \\stdClass, b: \\stdClass}, empty: array, "NS\\\\sub\\\\": string} */',
             'public array $array;',
             'public \\stdClass $object;',
             'public \\Closure $closureclosure;',
