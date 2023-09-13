@@ -505,6 +505,11 @@ MIT
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
 
+### 1.0.5
+
+- [fixbug] IDE によっては ArrayShape のキーをクォートしないと notice が出ることがある不具合を修正
+- [fixbug] typehint クラスにコンストラクタがなく notice が出ていた不具合を修正
+
 ### 1.0.4
 
 - [tests] lazy アクセスの導入で yield の fn が要らなくなっているはずなのでテストケースを追加
