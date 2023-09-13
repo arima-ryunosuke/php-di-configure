@@ -291,9 +291,11 @@ class Container implements ContainerInterface, ArrayAccess
         }
 
         if ($filename !== null) {
-            $parts      = explode('\\', get_class($this));
-            $classname  = array_pop($parts);
-            $namespace  = implode('\\', $parts);
+            $parts     = explode('\\', get_class($this));
+            $classname = array_pop($parts);
+            $namespace = implode('\\', $parts);
+
+            $construct  = '    public function __construct(array $options = []) { }';
             $properties = '';
             foreach ($result as $name => $type) {
                 if ($type === 'array') {
@@ -309,7 +311,7 @@ class Container implements ContainerInterface, ArrayAccess
                 }
                 $properties .= "    public $rtype$$name;\n";
             }
-            file_put_contents($filename, "<?php\nnamespace $namespace;\n\nclass $classname\n{\n$properties}\n");
+            file_put_contents($filename, "<?php\nnamespace $namespace;\n\nclass $classname\n{\n$construct\n\n$properties}\n");
         }
         return $result;
     }
