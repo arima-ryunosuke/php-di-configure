@@ -428,6 +428,94 @@ class ContainerTest extends AbstractTestCase
         that($staticCounter)->is(1);
     }
 
+    function test_parent()
+    {
+        $object_merge    = function ($object, $array) {
+            foreach ($array as $key => $value) {
+                $object->$key = $value;
+            }
+            return $object;
+        };
+        $arrayFnCounter  = 0;
+        $objectFnCounter = 0;
+        $container       = new Container();
+        $container->extends([
+            'array'    => [
+                'hoge' => 'Hoge',
+            ],
+            'arrayFn'  => function () use (&$arrayFnCounter): array {
+                $arrayFnCounter++;
+                return [
+                    'hoge' => 'Hoge',
+                ];
+            },
+            'object'   => (object) [
+                'hoge' => 'Hoge',
+            ],
+            'objectFn' => function () use (&$objectFnCounter): stdClass {
+                $objectFnCounter++;
+                return (object) [
+                    'hoge' => 'Hoge',
+                ];
+            },
+        ]);
+        $container->extends([
+            'array'    => $container->parent(fn($parrent) => array_merge($parrent, [
+                'fuga' => 'Fuga',
+            ])),
+            'arrayFn'  => $container->parent(fn($parrent) => array_merge($parrent, [
+                'fuga' => 'Fuga',
+            ])),
+            'object'   => $container->parent(fn($parrent) => $object_merge($parrent, [
+                'fuga' => 'Fuga',
+            ])),
+            'objectFn' => $container->parent(fn($parrent) => $object_merge($parrent, [
+                'fuga' => 'Fuga',
+            ])),
+        ]);
+        $container->extends([
+            'array'    => $container->parent(function ($parrent) {
+                $parrent['hoge'] .= 'X';
+                return $parrent;
+            }),
+            'arrayFn'  => $container->parent(function ($parrent) {
+                $parrent['hoge'] .= 'X';
+                return $parrent;
+            }),
+            'object'   => $container->parent(function ($parrent) {
+                $parrent->hoge .= 'X';
+                return $parrent;
+            }),
+            'objectFn' => $container->parent(function ($parrent) {
+                $parrent->hoge .= 'X';
+                return $parrent;
+            }),
+        ]);
+
+        that($arrayFnCounter)->is(0);
+        that($objectFnCounter)->is(0);
+
+        that($container->get('array'))->is([
+            'hoge' => 'HogeX',
+            'fuga' => 'Fuga',
+        ]);
+        that($container->get('arrayFn'))->is([
+            'hoge' => 'HogeX',
+            'fuga' => 'Fuga',
+        ]);
+        that($container->get('object'))->is((object) [
+            'hoge' => 'HogeX',
+            'fuga' => 'Fuga',
+        ]);
+        that($container->get('objectFn'))->is((object) [
+            'hoge' => 'HogeX',
+            'fuga' => 'Fuga',
+        ]);
+
+        that($arrayFnCounter)->is(1);
+        that($objectFnCounter)->is(1);
+    }
+
     function test_callable()
     {
         $container = new Container();

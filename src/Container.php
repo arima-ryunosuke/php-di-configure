@@ -118,8 +118,12 @@ class Container implements ContainerInterface, ArrayAccess
                 if (array_key_exists($key, $currents)) {
                     $current = $currents[$key];
                     // closures that return array are also allowed to merge
-                    if ($v !== self::$novalue && ($this->getValueType($current) === 'array' xor $this->getValueType($v) === 'array')) {
-                        throw self::newContainerException("%s is not array", $id);
+                    if ($v !== self::$novalue) {
+                        $ctype = $this->getValueType($current);
+                        $vtype = $this->getValueType($v);
+                        if (($ctype !== 'unsettled' && $vtype !== 'unsettled') && ($ctype === 'array' xor $vtype === 'array')) {
+                            throw self::newContainerException("%s is not array", $id);
+                        }
                     }
                 }
                 if (is_array($current) && is_array($v)) {
@@ -231,6 +235,23 @@ class Container implements ContainerInterface, ArrayAccess
         $this->closureMetadata->attach($closure, (object) [
             'dynamic'    => false,
             'returnType' => ltrim($classname, '\\'),
+        ]);
+        return $closure;
+    }
+
+    public function parent(callable $callback): Closure
+    {
+        $parents = $this->entries;
+        $closure = static function ($c, $keys) use ($callback, $parents) {
+            $entry = $parents;
+            foreach (array_reverse($keys) as $key) {
+                $entry = $entry[$key] ?? null;
+            }
+            return $callback($c->factory($keys, $entry), $c);
+        };
+        $this->closureMetadata->attach($closure, (object) [
+            'dynamic'    => false,
+            'returnType' => 'unsettled',
         ]);
         return $closure;
     }
