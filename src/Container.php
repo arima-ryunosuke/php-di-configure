@@ -194,6 +194,17 @@ class Container implements ContainerInterface, ArrayAccess
         return self::$novalue;
     }
 
+    public function env(string ...$names): ?string
+    {
+        foreach ($names as $name) {
+            $env = getenv($name, true);
+            if ($env !== false) {
+                return $env;
+            }
+        }
+        return null;
+    }
+
     public function fn(string $id): Closure
     {
         return fn() => $this->get($id);

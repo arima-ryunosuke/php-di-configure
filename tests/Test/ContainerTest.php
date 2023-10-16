@@ -249,6 +249,18 @@ class ContainerTest extends AbstractTestCase
         that($container->fn('array.hoge'))->isInstanceOf(Closure::class)()->is('HOGE');
     }
 
+    function test_env()
+    {
+        putenv('THISISTESTENV=test-env');
+        $container = new Container();
+
+        that($container->env('notfound'))->is(null);
+        that($container->env('THISISTESTENV'))->is('test-env');
+
+        that($container->env('notfound1', 'notfound2', 'notfound3'))->is(null);
+        that($container->env('notfound1', 'notfound2', 'THISISTESTENV', 'notfound3'))->is('test-env');
+    }
+
     function test_lazy()
     {
         $container = new Container();
