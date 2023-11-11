@@ -102,6 +102,205 @@ class ContainerTest extends AbstractTestCase
         ]);
     }
 
+    function test_mount_nest()
+    {
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount', []);
+        that($container['config'])->is([
+            'file' => [
+                realpath(__DIR__ . '/files/mount/.php'),
+            ],
+            'name' => 'root',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount', ['com']);
+        that($container['config'])->is([
+            'file' => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/com/.php'),
+            ],
+            'com'  => 'com',
+            'name' => 'com',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount', ['com', 'host']);
+        that($container['config'])->is([
+            'file' => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/com/.php'),
+                realpath(__DIR__ . '/files/mount/com/host.php'),
+            ],
+            'com'  => 'com',
+            'name' => 'host.com',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount', ['com', 'example']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/com/.php'),
+                realpath(__DIR__ . '/files/mount/com/example/.php'),
+            ],
+            'com'     => 'com',
+            'example' => 'example',
+            'name'    => 'example',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount', ['com', 'example', 'host']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/com/.php'),
+                realpath(__DIR__ . '/files/mount/com/example/.php'),
+                realpath(__DIR__ . '/files/mount/com/example/host.php'),
+            ],
+            'com'     => 'com',
+            'example' => 'example',
+            'name'    => 'host.example.com',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount', ['com', 'example', 'host', 'dummy']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/com/.php'),
+                realpath(__DIR__ . '/files/mount/com/example/.php'),
+                realpath(__DIR__ . '/files/mount/com/example/host.php'),
+            ],
+            'com'     => 'com',
+            'example' => 'example',
+            'name'    => 'host.example.com',
+        ]);
+    }
+
+    function test_mount_flat()
+    {
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', []);
+        that($container['config'])->is([
+            'file' => [
+                realpath(__DIR__ . '/files/mount/.php'),
+            ],
+            'name' => 'root',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['net']);
+        that($container['config'])->is([
+            'file' => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/net.php'),
+            ],
+            'net'  => 'net',
+            'name' => 'net',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount', ['net', 'host']);
+        that($container['config'])->is([
+            'file' => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/net.php'),
+                realpath(__DIR__ . '/files/mount/net.host.php'),
+            ],
+            'net'  => 'net',
+            'name' => 'host.net',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['net', 'example']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/net.php'),
+                realpath(__DIR__ . '/files/mount/net.example.php'),
+            ],
+            'net'     => 'net',
+            'example' => 'example',
+            'name'    => 'example',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['net', 'example', 'host']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/net.php'),
+                realpath(__DIR__ . '/files/mount/net.example.php'),
+                realpath(__DIR__ . '/files/mount/net.example.host.php'),
+            ],
+            'net'     => 'net',
+            'example' => 'example',
+            'name'    => 'host.example.net',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['net', 'example', 'host', 'dummy']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/net.php'),
+                realpath(__DIR__ . '/files/mount/net.example.php'),
+                realpath(__DIR__ . '/files/mount/net.example.host.php'),
+            ],
+            'net'     => 'net',
+            'example' => 'example',
+            'name'    => 'host.example.net',
+        ]);
+    }
+
+    function test_mount_path()
+    {
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', []);
+        that($container['config'])->is([
+            'file' => [
+                realpath(__DIR__ . '/files/mount/.php'),
+            ],
+            'name' => 'root',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['org', 'example']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/org.example/.php'),
+            ],
+            'example' => 'example',
+            'name'    => 'example',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['org', 'example', 'host']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/org.example/.php'),
+                realpath(__DIR__ . '/files/mount/org.example/host.php'),
+            ],
+            'example' => 'example',
+            'name'    => 'host.example.org',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['org', 'example', 'host', 'dummy']);
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/org.example/.php'),
+                realpath(__DIR__ . '/files/mount/org.example/host.php'),
+            ],
+            'example' => 'example',
+            'name'    => 'host.example.org',
+        ]);
+    }
+
     function test_alias()
     {
         $container = new Container();

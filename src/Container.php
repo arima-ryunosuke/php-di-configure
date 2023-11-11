@@ -4,10 +4,13 @@ namespace ryunosuke\castella;
 
 use ArrayAccess;
 use Closure;
+use FilesystemIterator;
 use LogicException;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use ReflectionClass;
 use ReflectionFunction;
 use ReflectionIntersectionType;
@@ -148,6 +151,35 @@ class Container implements ContainerInterface, ArrayAccess
         finally {
             $this->including = false;
         }
+    }
+
+    public function mount(string $directory, ?array $pathes = null): self
+    {
+        $rdi = new RecursiveDirectoryIterator($directory,
+            FilesystemIterator::SKIP_DOTS | FilesystemIterator::UNIX_PATHS | FilesystemIterator::KEY_AS_PATHNAME | FilesystemIterator::CURRENT_AS_SELF
+        );
+        $rii = new RecursiveIteratorIterator($rdi,
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+
+        $files = [];
+        foreach ($rii as $path => $file) {
+            /** @var RecursiveDirectoryIterator $file */
+            $files[preg_replace('#/\\.|/#', '.', $file->getSubPathname())] = $path;
+        }
+
+        $pathes ??= array_reverse(explode('.', gethostname()));
+        array_unshift($pathes, ''); // for $directory.php
+
+        $current = '';
+        foreach ($pathes as $path) {
+            $current = strlen($current) ? "$current.$path" : $path;
+            if (isset($files[$fn = "$current.php"])) {
+                $this->include($files[$fn]);
+            }
+        }
+
+        return $this;
     }
 
     public function set(string $id, $value): self
