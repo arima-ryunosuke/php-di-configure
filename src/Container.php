@@ -253,7 +253,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function yield(string $classname, array $arguments = []): Closure
     {
-        $closure = fn($c) => $c->instance($classname, $arguments, false);
+        $closure = fn(self $c) => $c->instance($classname, $arguments, false);
         $this->closureMetadata->attach($closure, (object) [
             'dynamic'    => true,
             'returnType' => ltrim($classname, '\\'),
@@ -263,7 +263,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function static(string $classname, array $arguments = []): Closure
     {
-        $closure = static fn($c) => $c->instance($classname, $arguments, false);
+        $closure = static fn(self $c) => $c->instance($classname, $arguments, false);
         $this->closureMetadata->attach($closure, (object) [
             'dynamic'    => false,
             'returnType' => ltrim($classname, '\\'),
@@ -274,7 +274,7 @@ class Container implements ContainerInterface, ArrayAccess
     public function parent(callable $callback): Closure
     {
         $parents = $this->entries;
-        $closure = static function ($c, $keys) use ($callback, $parents) {
+        $closure = static function (self $c, $keys) use ($callback, $parents) {
             $entry = $parents;
             foreach (array_reverse($keys) as $key) {
                 $entry = $entry[$key] ?? null;
@@ -295,7 +295,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function array(array $entry): Closure
     {
-        return fn($c, $keys): array => array_map(fn($v) => $c->factory($keys, $v), $entry);
+        return fn(self $c, $keys): array => array_map(fn($v) => $c->factory($keys, $v), $entry);
     }
 
     public function annotate(?string $filename = null): array
