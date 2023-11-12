@@ -289,6 +289,77 @@ include のコンテキストで `$this['entry']` のように直参照すると
 
 自身のエントリを参照するわけなので、static 固定です。
 
+#### mount(string $directory, ?array $pathes = null): self
+
+指定ディレクトリ内の $pathes に基づくファイルをすべて読み込みます。
+拡張子は `.php` 固定です。
+
+「$pathes に基づく」とは単純にファイルシステムの階層構造を表します。
+その際、ディレクトリ内の `.php` (名前なし php ファイル)は必ず読み込まれます。
+
+```
+./mount
+├── .php
+├── com
+│   ├── .php
+│   └── example
+│        ├── .php
+│        └── host.php
+├── net.example.host.php
+├── net.example.php
+├── net.php
+└── org.example
+    ├── .php
+    └── host.php
+```
+
+このような階層の時、`mount` ディレクトリ指定で $pathes で読み込まれるファイルは下記となります。
+
+- `[]`: 
+  - `mount/.php`: 名前なし php ファイルなので必ず読み込まれる
+- `['com']`: 
+  - `mount/.php`: 同上
+  - `mount/com/.php`: 名前なし php ファイルなので必ず読み込まれる
+- `['com', 'example']`: 
+  - `mount/.php`: 同上
+  - `mount/com/.php`: 同上
+  - `mount/com/example/.php`: 名前なし php ファイルなので必ず読み込まれる
+- `['com', 'example', 'host']`: 
+  - `mount/.php`: 同上
+  - `mount/com/.php`: 同上
+  - `mount/com/example/.php`: 同上
+  - `mount/com/example/host.php`: basename が一致するので読み込まれる
+- `['net']`: 
+  - `mount/.php`: 同上
+  - `mount/net.php`: 名前なし php ファイルなので必ず読み込まれる
+- `['net', 'example']`: 
+  - `mount/.php`: 同上
+  - `mount/net.php`: 同上
+  - `mount/net.example.php`: 名前なし php ファイルなので必ず読み込まれる
+- `['net', 'example', 'host']`: 
+  - `mount/.php`: 同上
+  - `mount/net.php`: 同上
+  - `mount/net.example.php`: 同上
+  - `mount/net.example.host.php`: basename が一致するので読み込まれる
+- `['org']`: 
+  - `mount/.php`: 同上
+- `['org', 'example']`: 
+  - `mount/.php`: 同上
+  - `mount/org.example/.php`: 名前なし php ファイルなので必ず読み込まれる
+- `['org', 'example', 'host']`: 
+  - `mount/.php`: 同上
+  - `mount/org.example/.php`: 同上
+  - `mount/org.example/host.php`: basename が一致するので読み込まれる
+
+要するに apache の htaccess のような関係性で、指定階層のファイルとその通過中のディレクトリの `.php` が読み込まれます。
+読み込みはディレクトリ優先です。
+
+上記は com は完全なるネスト構造、 net は完全なるフラット構造、 org はその中間（必要が無ければディレクトリが結合できる）の例示になっています。
+これらの配置が混在しているときの動作は規定していないことに注意してください（おそらくすべてが読み込まれる。弊害はないだろうが無駄が多くなる）。
+
+`$pathes` はデフォルトではホスト名の逆順です。
+引数を与えた場合、変に加工せずそのまま使います。典型的には環境変数由来の値を与えることが多いでしょう。
+
 #### set(string $id, $value): self
 
 id 指定でエントリを設定します。
@@ -371,6 +442,22 @@ $container->extends([
 ]);
 ```
 
+#### env(string $name): ?string
+
+`getenv` のラッパーで環境変数値を返します。
+
+`getenv` の第2引数は true です。putenv(dotenv) で設定されている場合はそれを返します。
+
+可変引数で、最初に見つかった環境変数を返します。
+すべての環境変数が存在しない場合は（false ではなく） null を返します。
+つまり、下記のように `??` を用いればデフォルト値を得ることが可能です。
+
+```php
+<?php return [
+    'tmpbyenv' => $this->env('TMP', 'TEMP', 'TMPDIR') ?? '/path/to/default',
+];
+```
+
 #### new(string $classname, array $arguments = []): object
 
 与えられたクラス名のインスタンスを生成します。
@@ -426,6 +513,27 @@ hoge3 は yield を使いつつ引数の遅延実行しています。
     'hoge2'     => $this->static(Hoge::class),
 ];
 ```
+
+#### parent(callable $callback): Closure
+
+直近の親の値を受け取って値を変換するクロージャを返します。
+親の設定を活かしつつ、軽微な変更を施したいときに使用します。
+
+```php
+# parent.php
+<?php return [
+    'array'  => ['a', 'b'],
+    'object' => new Something(),
+];
+# child.php
+<?php return [
+    'array'  => $this->parent(fn($parent) => array_merge($parent, ['c'])),
+    'object' => $this->parent(fn($parent) => $parent->setSomething()),
+];
+```
+
+上記で array は `['a', 'b', 'c']` になります。
+object は親の `new Something()` インスタンスの setSomething が呼ばれています。
 
 #### callable(callable $entry): Closure
 
@@ -504,6 +612,12 @@ MIT
 ## Release
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
+
+### 1.0.6
+
+- [feature] 指定ディレクトリを一括で読み込む mount メソッドを追加
+- [feature] 親の値を改変できる parent メソッドを追加
+- [feature] 環境変数を返す env メソッドを追加
 
 ### 1.0.5
 
