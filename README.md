@@ -289,7 +289,7 @@ include のコンテキストで `$this['entry']` のように直参照すると
 
 自身のエントリを参照するわけなので、static 固定です。
 
-#### mount(string $directory, ?array $pathes = null): self
+#### mount(string $directory, ?array $pathes = null, ?string $user = null): self
 
 指定ディレクトリ内の $pathes に基づくファイルをすべて読み込みます。
 拡張子は `.php` 固定です。
@@ -359,6 +359,10 @@ include のコンテキストで `$this['entry']` のように直参照すると
 
 `$pathes` はデフォルトではホスト名の逆順です。
 引数を与えた場合、変に加工せずそのまま使います。典型的には環境変数由来の値を与えることが多いでしょう。
+
+`$user` を与えると最終的なファイル名が `basename@{$user}.php` であるファイルも追加で読み込まれるようになります。
+これは既存設定ファイルにバリエーションを持たせるための機能で、`user` という引数に特別な意味合いはありません（敢えて言うならデフォルト値でユーザー名が使用される）。
+そのようなファイルを読みたい場合は `$pathes` で指定すれば十分であり、この機能が活きるのはかなり局所的な使い方になります。
 
 #### set(string $id, $value): self
 
@@ -612,6 +616,10 @@ MIT
 ## Release
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
+
+### 1.0.7
+
+- [feature] mount メソッドに user 引数を追加
 
 ### 1.0.6
 
