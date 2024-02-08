@@ -301,6 +301,49 @@ class ContainerTest extends AbstractTestCase
         ]);
     }
 
+    function test_mount_user()
+    {
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', [], 'user');
+        that($container['config'])->is([
+            'file' => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/@user.php'),
+            ],
+            'name' => 'root',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['net', 'example', 'host'], 'user');
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/@user.php'),
+                realpath(__DIR__ . '/files/mount/net.php'),
+                realpath(__DIR__ . '/files/mount/net.example.php'),
+                realpath(__DIR__ . '/files/mount/net.example.host.php'),
+                realpath(__DIR__ . '/files/mount/net.example.host@user.php'),
+            ],
+            'net'     => 'net',
+            'example' => 'example',
+            'name'    => 'user@host.example.net',
+        ]);
+
+        $container = new Container();
+        $container->mount(__DIR__ . '/files/mount/', ['net', 'example', 'host'], 'notfound');
+        that($container['config'])->is([
+            'file'    => [
+                realpath(__DIR__ . '/files/mount/.php'),
+                realpath(__DIR__ . '/files/mount/net.php'),
+                realpath(__DIR__ . '/files/mount/net.example.php'),
+                realpath(__DIR__ . '/files/mount/net.example.host.php'),
+            ],
+            'net'     => 'net',
+            'example' => 'example',
+            'name'    => 'host.example.net',
+        ]);
+    }
+
     function test_alias()
     {
         $container = new Container();

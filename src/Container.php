@@ -153,7 +153,7 @@ class Container implements ContainerInterface, ArrayAccess
         }
     }
 
-    public function mount(string $directory, ?array $pathes = null): self
+    public function mount(string $directory, ?array $pathes = null, ?string $user = null): self
     {
         $rdi = new RecursiveDirectoryIterator($directory,
             FilesystemIterator::SKIP_DOTS | FilesystemIterator::UNIX_PATHS | FilesystemIterator::KEY_AS_PATHNAME | FilesystemIterator::CURRENT_AS_SELF
@@ -171,10 +171,15 @@ class Container implements ContainerInterface, ArrayAccess
         $pathes ??= array_reverse(explode('.', gethostname()));
         array_unshift($pathes, ''); // for $directory.php
 
+        $user ??= $this->env('USER', 'USERNAME');
+
         $current = '';
         foreach ($pathes as $path) {
             $current = strlen($current) ? "$current.$path" : $path;
             if (isset($files[$fn = "$current.php"])) {
+                $this->include($files[$fn]);
+            }
+            if (isset($user, $files[$fn = "$current@$user.php"])) {
                 $this->include($files[$fn]);
             }
         }
