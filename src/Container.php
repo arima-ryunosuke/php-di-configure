@@ -622,7 +622,10 @@ class Container implements ContainerInterface, ArrayAccess
                 }
                 return $type->getName();
             }
-            // @todo ReflectionUnionType, ReflectionIntersectionType
+            if ($type instanceof ReflectionUnionType) {
+                return $type;
+            }
+            // @todo ReflectionIntersectionType
             return 'void';
         }
         if (is_object($value)) {

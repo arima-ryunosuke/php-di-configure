@@ -999,6 +999,7 @@ class ContainerTest extends AbstractTestCase
         that($container)->getValueType(fn(): int => 123)->is('int');
         that($container)->getValueType(fn(): array => [1, 2, 3])->is('array');
         that($container)->getValueType(fn() => null)->is('void');
+        that($container)->getValueType(fn(): int|string => 0)->is('string|int');
         that($container)->getValueType($container->yield(stdClass::class))->is('stdClass');
         that($container)->getValueType($container->static(stdClass::class))->is('stdClass');
     }
