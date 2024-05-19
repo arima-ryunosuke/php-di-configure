@@ -1,7 +1,7 @@
 {
   "config": {
     "platform": {
-      "php": "7.4"
+      "php": "8.0"
     }
   },
   "name": "ryunosuke/castella",
@@ -24,12 +24,12 @@
     }
   },
   "require": {
-    "php": ">=7.4",
+    "php": ">=8.0",
     "psr/container": "1.* || 2.*"
   },
   "require-dev": {
     "phpunit/phpunit": "9.*",
-    "ryunosuke/phpunit-extension": "3.*"
+    "ryunosuke/phpunit-extension": "4.*"
   },
   "scripts": {
     "build": [
