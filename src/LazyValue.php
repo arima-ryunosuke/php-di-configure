@@ -21,42 +21,34 @@ class LazyValue implements ArrayAccess
     {
         $value = ($this->provider)();
         foreach ($this->lazy as [$method, $arguments]) {
-            switch ($method) {
-                case 'offsetGet':
-                    $value = $value[$arguments[0]];
-                    break;
-                case '__get':
-                    $value = $value->{$arguments[0]};
-                    break;
-                default:
-                    $value = $value->$method(...$arguments);
-                    break;
-            }
+            $value = match ($method) {
+                'offsetGet' => $value[$arguments[0]],
+                '__get'     => $value->{$arguments[0]},
+                default     => $value->$method(...$arguments),
+            };
         }
         return $value;
     }
 
-    public function __get($name)
+    public function __get(string $name): static
     {
         $this->lazy[] = [__FUNCTION__, [$name]];
         return $this;
     }
 
-    public function __call($name, $arguments)
+    public function __call(string $name, array $arguments): static
     {
         $this->lazy[] = [$name, $arguments];
         return $this;
     }
 
-    public function __invoke(...$args)
+    public function __invoke(...$args): static
     {
         $this->lazy[] = [__FUNCTION__, $args];
         return $this;
     }
 
-    /** @noinspection PhpLanguageLevelInspection */
-    #[\ReturnTypeWillChange]
-    public function offsetGet($offset)//: mixed
+    public function offsetGet(mixed $offset): static
     {
         $this->lazy[] = [__FUNCTION__, [$offset]];
         return $this;

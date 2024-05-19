@@ -77,22 +77,22 @@ class Container implements ContainerInterface, ArrayAccess
 
     #<editor-fold desc="MagicAccess">
 
-    public function __isset($name)
+    public function __isset(string $name): bool
     {
         return $this->has($name);
     }
 
-    public function __get($name)
+    public function __get(string $name): mixed
     {
         return $this->get($name);
     }
 
-    public function __set($name, $value)
+    public function __set(string $name, mixed $value): void
     {
         $this->set($name, $value);
     }
 
-    public function __unset($name)
+    public function __unset(string $name): void
     {
         throw self::newContainerException('__unset is not support');
     }
@@ -222,7 +222,7 @@ class Container implements ContainerInterface, ArrayAccess
             $this->fetch($id);
             return true;
         }
-        catch (NotFoundExceptionInterface $e) {
+        catch (NotFoundExceptionInterface) {
             if ($this->autowiring && class_exists($id)) {
                 return true;
             }
@@ -547,14 +547,18 @@ class Container implements ContainerInterface, ArrayAccess
         $type    = $reflection->getType();
         $name    = $reflection->getName();
         $message = function () use ($reflection): string {
-            switch (true) {
-                case $reflection instanceof ReflectionParameter:
-                    return sprintf("failed to resolve $%s in %s::%s", $reflection, $reflection->getDeclaringClass()->getName(), $reflection->getDeclaringFunction()->getName());
-                case $reflection instanceof ReflectionProperty:
-                    return sprintf("failed to resolve $%s in %s", $reflection, $reflection->getDeclaringClass()->getName());
-                default:
-                    return strval($reflection); // @codeCoverageIgnore
-            }
+            return match (true) {
+                $reflection instanceof ReflectionParameter => vsprintf("failed to resolve $%s in %s::%s", [
+                    $reflection,
+                    $reflection->getDeclaringClass()->getName(),
+                    $reflection->getDeclaringFunction()->getName(),
+                ]),
+                $reflection instanceof ReflectionProperty  => vsprintf("failed to resolve $%s in %s", [
+                    $reflection,
+                    $reflection->getDeclaringClass()->getName(),
+                ]),
+                default                                    => strval($reflection), // @codeCoverageIgnore
+            };
         };
         $detect  = function (string $id, $entry) {
             if (array_key_exists($id, $this->settled) && is_object($this->settled[$id])) {
@@ -578,7 +582,7 @@ class Container implements ContainerInterface, ArrayAccess
                     return $this->get($id);
                 }
             }
-            catch (NotFoundExceptionInterface $e) {
+            catch (NotFoundExceptionInterface) {
                 // do nothing
             }
             $walk = function (array $array, array $keys, &$found = null) use (&$walk, $detect, $type, $message) {
@@ -600,7 +604,7 @@ class Container implements ContainerInterface, ArrayAccess
             $walk($this->entries, [], $found);
             return $this->get($found ?? $id);
         }
-        catch (NotFoundExceptionInterface $e) {
+        catch (NotFoundExceptionInterface) {
             throw self::newContainerException($message());
         }
     }
@@ -647,11 +651,10 @@ class Container implements ContainerInterface, ArrayAccess
             }
             if ($value instanceof Closure) {
                 $reffunc = new ReflectionFunction($value);
-                $typestr = fn(ReflectionType $type) => @((version_compare(PHP_VERSION, 8.0) < 0 && $type->allowsNull() ? '?' : '') . $type);
                 $params  = [];
                 foreach ($reffunc->getParameters() as $parameter) {
                     $params[] = implode('', [
-                        $parameter->hasType() ? $typestr($parameter->getType()) . ' ' : '',
+                        $parameter->hasType() ? $parameter->getType() . ' ' : '',
                         $parameter->isPassedByReference() ? '&' : '',
                         $parameter->isVariadic() ? '...$' : '$',
                         $parameter->getName(),
@@ -697,50 +700,29 @@ class Container implements ContainerInterface, ArrayAccess
 
         $single_match = function (string $typename, ReflectionType $targetType) use ($array_any, $array_all): bool {
             $match = fn(ReflectionNamedType $type) => is_a($typename, $type->getName(), true);
-            switch (true) {
-                case $targetType instanceof ReflectionNamedType:
-                    return $match($targetType);
-                case $targetType instanceof ReflectionUnionType:
-                    return $array_any($targetType->getTypes(), $match);
-                case $targetType instanceof ReflectionIntersectionType:
-                    return $array_all($targetType->getTypes(), $match);
-                default:
-                    throw self::newContainerException('unknown ReflectionType (%s)', get_class($targetType)); // @codeCoverageIgnore
-            }
+            return match (true) {
+                $targetType instanceof ReflectionNamedType        => $match($targetType),
+                $targetType instanceof ReflectionUnionType        => $array_any($targetType->getTypes(), $match),
+                $targetType instanceof ReflectionIntersectionType => $array_all($targetType->getTypes(), $match),
+                default                                           => throw self::newContainerException('unknown ReflectionType (%s)', get_class($targetType)), // @codeCoverageIgnore
+            };
         };
 
-        switch (true) {
-            case is_null($type):
-                return false;
-            case is_string($type):
-                return $single_match($type, $targetType);
-            case $type instanceof ReflectionNamedType:
-                return $single_match($type->getName(), $targetType);
-            case $type instanceof ReflectionUnionType:
-                return $array_any($type->getTypes(), fn(ReflectionNamedType $type) => $single_match($type->getName(), $targetType));
-            case $type instanceof ReflectionIntersectionType:
-                return $array_all($type->getTypes(), fn(ReflectionNamedType $type) => $single_match($type->getName(), $targetType));
-            default:
-                throw self::newContainerException('unknown ReflectionType (%s)', get_class($type)); // @codeCoverageIgnore
-        }
+        return match (true) {
+            is_null($type)                              => false,
+            is_string($type)                            => $single_match($type, $targetType),
+            $type instanceof ReflectionNamedType        => $single_match($type->getName(), $targetType),
+            $type instanceof ReflectionUnionType        => $array_any($type->getTypes(), fn(ReflectionNamedType $type) => $single_match($type->getName(), $targetType)),
+            $type instanceof ReflectionIntersectionType => $array_all($type->getTypes(), fn(ReflectionNamedType $type) => $single_match($type->getName(), $targetType)),
+            default                                     => throw self::newContainerException('unknown ReflectionType (%s)', get_class($type)), // @codeCoverageIgnore
+        };
     }
 
     private static function getTypeName($value): string
     {
-        switch (gettype($value)) {
-            case 'NULL':
-                return 'null';
-            case 'boolean':
-                return 'bool';
-            case 'integer':
-                return 'int';
-            case 'double':
-                return 'float';
-            case 'string':
-                return 'string';
-            case 'array':
-                return 'array';
-            case 'object':
+        $type = gettype($value);
+        return match (true) {
+            $type === 'object'                 => (function ($value) {
                 if (!(new ReflectionClass($value))->isAnonymous()) {
                     return '\\' . get_class($value);
                 }
@@ -754,12 +736,10 @@ class Container implements ContainerInterface, ArrayAccess
                 }
                 // @see https://www.jetbrains.com/help/phpstorm/ide-advanced-metadata.html#using-union-types
                 return implode('|', array_map(fn($v) => "\\$v", $types)) ?: 'object';
-            case 'resource':
-            case 'resource (closed)':
-                return 'resource';
-            default:
-                return 'unknown'; // @codeCoverageIgnore
-        }
+            })($value),
+            str_starts_with($type, 'resource') => 'resource',
+            default                            => get_debug_type($value),
+        };
     }
 
     private static function getArrayType(array $value): string
@@ -799,24 +779,22 @@ class Container implements ContainerInterface, ArrayAccess
     }
 
     #<editor-fold desc="ArrayAccess">
-    public function offsetExists($offset): bool
+    public function offsetExists(mixed $offset): bool
     {
         return $this->has($offset);
     }
 
-    /** @noinspection PhpLanguageLevelInspection */
-    #[\ReturnTypeWillChange]
-    public function offsetGet($offset)//: mixed
+    public function offsetGet(mixed $offset): mixed
     {
         return $this->get($offset);
     }
 
-    public function offsetSet($offset, $value): void
+    public function offsetSet(mixed $offset, $value): void
     {
         $this->set($offset, $value);
     }
 
-    public function offsetUnset($offset): void
+    public function offsetUnset(mixed $offset): void
     {
         throw self::newContainerException('offsetUnset is not support');
     }

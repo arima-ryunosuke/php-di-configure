@@ -5,35 +5,6 @@ require_once __DIR__ . '/../vendor/ryunosuke/phpunit-extension/inc/bootstrap.php
 
 \ryunosuke\PHPUnit\Actual::generateStub(__DIR__ . '/../src', __DIR__ . '/.stub');
 
-if (!interface_exists(Stringable::class)) {
-    interface Stringable
-    {
-        public function __toString(): string;
-    }
-}
-
-if (!class_exists(ReflectionUnionType::class)) {
-    class ReflectionUnionType extends ReflectionType
-    {
-        private array $types;
-
-        public function __construct(ReflectionNamedType ...$type)
-        {
-            $this->types = $type;
-        }
-
-        public function __toString(): string
-        {
-            return implode('|', $this->types);
-        }
-
-        public function getTypes(): array
-        {
-            return $this->types;
-        }
-    }
-}
-
 if (!class_exists(ReflectionIntersectionType::class)) {
     class ReflectionIntersectionType extends ReflectionType
     {

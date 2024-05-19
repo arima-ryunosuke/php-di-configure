@@ -6,7 +6,6 @@ use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
 use ReflectionIntersectionType;
 use ReflectionType;
-use ReflectionUnionType;
 
 class AbstractTestCase extends TestCase
 {
@@ -21,11 +20,8 @@ class AbstractTestCase extends TestCase
         }
 
         if (count($type) > 1) {
-            if (version_compare(PHP_VERSION, 8.0) >= 0) {
-                $type = implode('|', $type);
-                return (new ReflectionFunction(eval("return fn(): $type => null;")))->getReturnType();
-            }
-            return new ReflectionUnionType(...array_map(fn($v) => self::getReflectionType($v), $type));
+            $type = implode('|', $type);
+            return (new ReflectionFunction(eval("return fn(): $type => null;")))->getReturnType();
         }
 
         return (new ReflectionFunction(eval("return fn(): {$type[0]} => null;")))->getReturnType();
