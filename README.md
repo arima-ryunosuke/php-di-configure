@@ -617,6 +617,11 @@ MIT
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
 
+### 2.0.0
+
+- [change] php>=8.0
+  - 非互換はないが管理上の都合でバージョンアップ
+
 ### 1.0.7
 
 - [feature] mount メソッドに user 引数を追加
