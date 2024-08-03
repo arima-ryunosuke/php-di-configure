@@ -20,9 +20,9 @@ use ReflectionProperty;
 use ReflectionType;
 use ReflectionUnionType;
 use RuntimeException;
-use SplObjectStorage;
 use stdClass;
 use Throwable;
+use WeakMap;
 
 class Container implements ContainerInterface, ArrayAccess
 {
@@ -38,8 +38,8 @@ class Container implements ContainerInterface, ArrayAccess
     private bool    $propertyInjection;
     private Closure $resolver;
 
-    private SplObjectStorage $uninitializedObjects;
-    private SplObjectStorage $closureMetadata;
+    private WeakMap $uninitializedObjects;
+    private WeakMap $closureMetadata;
 
     private array $entries = [];
     private array $settled = [];
@@ -56,8 +56,8 @@ class Container implements ContainerInterface, ArrayAccess
         $this->propertyInjection    = $options['propertyInjection'] ?? true;
         $this->resolver             = Closure::bind(Closure::fromCallable($options['resolver'] ?? [$this, 'resolve']), $this, $this);
 
-        $this->uninitializedObjects = new SplObjectStorage();
-        $this->closureMetadata      = new SplObjectStorage();
+        $this->uninitializedObjects = new WeakMap();
+        $this->closureMetadata      = new WeakMap();
     }
 
     public function __debugInfo()
@@ -243,7 +243,7 @@ class Container implements ContainerInterface, ArrayAccess
                 if (is_array($value)) {
                     $founds += $array_find_recursive($value, array_merge($keys, [$key]));
                 }
-                elseif ($value instanceof Closure && $this->closureMetadata->contains($value)) {
+                elseif ($value instanceof Closure && isset($this->closureMetadata[$value])) {
                     if (property_exists($this->closureMetadata[$value], 'const')) {
                         $id          = implode($this->delimiter, array_merge($keys, [$key]));
                         $founds[$id] = $this->closureMetadata[$value];
@@ -278,11 +278,11 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function const(mixed $value, ?string $name = null): Closure
     {
-        $closure = static fn() => $value;
-        $this->closureMetadata->attach($closure, (object) [
+        $closure                         = static fn() => $value;
+        $this->closureMetadata[$closure] = (object) [
             'dynamic' => false,
             'const'   => $name,
-        ]);
+        ];
         return $closure;
     }
 
@@ -298,38 +298,38 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function yield(string $classname, array $arguments = []): Closure
     {
-        $closure = fn(self $c) => $c->instance($classname, $arguments, false);
-        $this->closureMetadata->attach($closure, (object) [
+        $closure                         = fn(self $c) => $c->instance($classname, $arguments, false);
+        $this->closureMetadata[$closure] = (object) [
             'dynamic'    => true,
             'returnType' => ltrim($classname, '\\'),
-        ]);
+        ];
         return $closure;
     }
 
     public function static(string $classname, array $arguments = []): Closure
     {
-        $closure = static fn(self $c) => $c->instance($classname, $arguments, false);
-        $this->closureMetadata->attach($closure, (object) [
+        $closure                         = static fn(self $c) => $c->instance($classname, $arguments, false);
+        $this->closureMetadata[$closure] = (object) [
             'dynamic'    => false,
             'returnType' => ltrim($classname, '\\'),
-        ]);
+        ];
         return $closure;
     }
 
     public function parent(callable $callback): Closure
     {
-        $parents = $this->entries;
-        $closure = static function (self $c, $keys) use ($callback, $parents) {
+        $parents                         = $this->entries;
+        $closure                         = static function (self $c, $keys) use ($callback, $parents) {
             $entry = $parents;
             foreach (array_reverse($keys) as $key) {
                 $entry = $entry[$key] ?? null;
             }
             return $callback($c->factory($keys, $entry), $c);
         };
-        $this->closureMetadata->attach($closure, (object) [
+        $this->closureMetadata[$closure] = (object) [
             'dynamic'    => false,
             'returnType' => 'unsettled',
-        ]);
+        ];
         return $closure;
     }
 
@@ -491,7 +491,7 @@ class Container implements ContainerInterface, ArrayAccess
 
         // set ahead to deter infinite loops and unset on catch
         $this->settled[$id] = $entry;
-        if (is_object($entry) && $this->uninitializedObjects->contains($entry)) {
+        if (is_object($entry) && isset($this->uninitializedObjects[$entry])) {
             try {
                 $this->uninitializedObjects[$entry]($keys);
             }
@@ -568,16 +568,16 @@ class Container implements ContainerInterface, ArrayAccess
             return $propertyInjection(new $classname(...$constructorInjection($arguments)));
         }
 
-        $object = $refclass->newInstanceWithoutConstructor();
-        $this->uninitializedObjects->attach($object, function ($keys) use ($refclass, $object, $arguments, $constructorInjection, $propertyInjection) {
-            $this->uninitializedObjects->detach($object);
+        $object                              = $refclass->newInstanceWithoutConstructor();
+        $this->uninitializedObjects[$object] = function ($keys) use ($refclass, $object, $arguments, $constructorInjection, $propertyInjection) {
+            unset($this->uninitializedObjects[$object]);
 
             if ($constructor = $refclass->getConstructor()) {
                 $arguments = $constructorInjection(array_map(fn($v) => $this->factory($keys, $v), $arguments));
                 $constructor->invokeArgs($object, $arguments);
             }
             $propertyInjection($object);
-        });
+        };
         return $object;
     }
 
