@@ -6,6 +6,7 @@
 
 return [
     'env'      => [
+        'ip'        => $this->const('127.0.0.1', 'LOCAL_IP'),
         'name'      => 'local',
         'origin'    => 'http://localhost',
         'loglevel'  => 'info',
@@ -40,6 +41,7 @@ return [
         },
     ],
     'database' => [
+        'ip'            => $this->const('127.0.0.1', 'DB_IP'),
         'driver'        => 'pdo_mysql',
         'host'          => '127.0.0.1',
         'port'          => 3306,
