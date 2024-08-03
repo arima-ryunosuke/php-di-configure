@@ -446,6 +446,48 @@ $container->extends([
 ]);
 ```
 
+#### const($value, ?string $name = null): Closure
+
+値をそのまま返します。
+
+このメソッドで与えられた値は後述の `define` を呼ぶとその値が定数として定義されます。
+定義場所は問いません。`const` された位置を覚えておいて、`define` で一気に登録するイメージです。
+
+#### define(): array
+
+`const` で返した値を一括で定数定義します。
+
+これの何が嬉しいかというと
+
+- どれが定数かを管理する必要がない
+- 遅延定義が使える
+
+です。
+
+```php
+<?php return [
+    'hoge  => $this->const('HOGE', 'CONST_NAME'),
+    'fuga' => 'FUGA',
+    'nest' => [
+        'hoge  => $this->const('HOGE'),
+        'fuga' => 'FUGA',
+    ],
+];
+```
+
+上記は設定ファイルとしての値は `const` を使用していない場合と全く同じです（`hoge` が `'HOGE'` で、`nest.hoge` が `'HOGE'`）。
+この状態で `define` を呼ぶと
+
+- `define("CONST_NAME", "HOGE");`
+- `define("NEST\\HOGE", "HOGE");`
+
+を実行したのと同じ効果になります。
+`const` `define` を使用せず、定数定義すべきものをちまちま `define("CONST_NAME", $container->get("key.to.const"));` しても同じですが、得てして変更時に漏れが発生しやすくなります。
+設定ファイル内で `const` しておけば「それが定数であること」と「定数定義されること」が保証されるため、漏れがなくなります。
+
+なお、上記の通り定数名はオプションです。
+指定しなかった場合はエントリのキーが大文字名前空間に変換されて定義されます。
+
 #### env(string $name): ?string
 
 `getenv` のラッパーで環境変数値を返します。
@@ -616,6 +658,10 @@ MIT
 ## Release
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
+
+### 1.0.8
+
+- [feature] 定数定義のサポート
 
 ### 1.0.7
 
