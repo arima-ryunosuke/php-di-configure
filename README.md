@@ -659,6 +659,11 @@ MIT
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
 
+### 2.0.1
+
+- [refactor] SplObjectStorage を WeakMap に変更
+- [merge] 1.0.8
+
 ### 2.0.0
 
 - [change] php>=8.0
