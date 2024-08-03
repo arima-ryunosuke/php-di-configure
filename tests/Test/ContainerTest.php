@@ -491,6 +491,21 @@ class ContainerTest extends AbstractTestCase
         that($container->fn('array.hoge'))->isInstanceOf(Closure::class)()->is('HOGE');
     }
 
+    function test_const_define()
+    {
+        $container = new Container();
+
+        that($container['c'] = $container->const('value1', 'CONST'))->isInstanceOf(Closure::class)()->is('value1');
+        that($container['a.b.c'] = $container->const('value2'))->isInstanceOf(Closure::class)()->is('value2');
+        that($container['array'] = $container->const([1, 2, 3], 'CONST_ARRAY'))->isInstanceOf(Closure::class)()->is([1, 2, 3]);
+
+        $container->define();
+
+        that(constant("CONST"))->is("value1");
+        that(constant("A\\B\\C"))->is("value2");
+        that(constant("CONST_ARRAY"))->is([1, 2, 3]);
+    }
+
     function test_env()
     {
         putenv('THISISTESTENV=test-env');
@@ -1134,6 +1149,15 @@ class ContainerTest extends AbstractTestCase
         $container->include(__DIR__ . '/files/config2.php');
         $container->set(SplTempFileObject::class, $container->yield(SplTempFileObject::class));
 
+        that($container->define())->is([
+            "LOCAL_IP"      => "127.0.0.1",
+            "DB_IP"         => "127.0.0.2",
+            "DATABASE\\CIP" => "127.0.0.3",
+        ]);
+        that(constant("LOCAL_IP"))->is("127.0.0.1");
+        that(constant("DB_IP"))->is("127.0.0.2");
+        that(constant("DATABASE\\CIP"))->is("127.0.0.3");
+
         $env    = $container['env'];
         $logger = $env['logger'];
         unset($env['logger']);
@@ -1142,6 +1166,7 @@ class ContainerTest extends AbstractTestCase
             "directory" => "/var/log/app",
         ]);
         that($env)->is([
+            'ip'        => '127.0.0.1',
             'name'      => 'local',
             'origin'    => 'http://localhost',
             'loglevel'  => 'debug',
@@ -1159,6 +1184,8 @@ class ContainerTest extends AbstractTestCase
             "directory" => "/var/log/app",
         ]);
         that($database)->is([
+            'ip'            => '127.0.0.2',
+            'cip'           => '127.0.0.3',
             'driver'        => 'pdo_mysql',
             'host'          => '127.0.0.1',
             'port'          => 3306,

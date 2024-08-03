@@ -235,6 +235,36 @@ class Container implements ContainerInterface, ArrayAccess
         return self::$novalue;
     }
 
+    public function define(): array
+    {
+        $array_find_recursive = function ($array, $keys) use (&$array_find_recursive) {
+            $founds = [];
+            foreach ($array as $key => $value) {
+                if (is_array($value)) {
+                    $founds += $array_find_recursive($value, array_merge($keys, [$key]));
+                }
+                elseif ($value instanceof Closure && $this->closureMetadata->contains($value)) {
+                    if (property_exists($this->closureMetadata[$value], 'const')) {
+                        $id          = implode($this->delimiter, array_merge($keys, [$key]));
+                        $founds[$id] = $this->closureMetadata[$value];
+                    }
+                }
+            }
+            return $founds;
+        };
+
+        $defined = [];
+        foreach ($array_find_recursive($this->entries, []) as $id => $metadata) {
+            $cname = $metadata->const ?? strtr(strtoupper($id), [$this->delimiter => '\\']);
+            $value = $this->get($id);
+
+            $defined[$cname] = $value;
+            define($cname, $value);
+        }
+
+        return $defined;
+    }
+
     public function env(string ...$names): ?string
     {
         foreach ($names as $name) {
@@ -244,6 +274,16 @@ class Container implements ContainerInterface, ArrayAccess
             }
         }
         return null;
+    }
+
+    public function const($value, ?string $name = null): Closure
+    {
+        $closure = static fn() => $value;
+        $this->closureMetadata->attach($closure, (object) [
+            'dynamic' => false,
+            'const'   => $name,
+        ]);
+        return $closure;
     }
 
     public function fn(string $id): Closure

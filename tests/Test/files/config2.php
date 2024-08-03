@@ -10,6 +10,8 @@ return [
         'extension' => $this->array(['js']),
     ],
     'database' => [
+        'ip'            => $this->const('127.0.0.2', 'DB_IP'),
+        'cip'           => $this->const('127.0.0.3'),
         'user'          => 'app',
         'password'      => 'p@ssword',
         'driverOptions' => [
