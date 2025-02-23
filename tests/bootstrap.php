@@ -3,6 +3,9 @@
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../vendor/ryunosuke/phpunit-extension/inc/bootstrap.php';
 
+@unlink(__DIR__ . '/../src/Utility.php');
+file_put_contents(__DIR__ . '/../src/Utility.php', \ryunosuke\Functions\Transporter::exportClass(\ryunosuke\castella\Utility::class, __DIR__ . '/../src'));
+
 \ryunosuke\PHPUnit\Actual::generateStub(__DIR__ . '/../src', __DIR__ . '/.stub');
 
 if (!class_exists(ReflectionIntersectionType::class)) {

@@ -344,6 +344,78 @@ class ContainerTest extends AbstractTestCase
         ]);
     }
 
+    function test_cache()
+    {
+        $configfile1 = realpath(__DIR__ . DIRECTORY_SEPARATOR . 'files/cache1.php');
+        $configfile2 = realpath(__DIR__ . DIRECTORY_SEPARATOR . 'files/cache2.php');
+        $cachefile   = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'castella-cache.php';
+
+        @unlink($cachefile);
+        $container = new Container();
+        that($container->cache($cachefile, function (Container $container) {
+            $container->set('direct', static fn() => 123);
+            return false;
+        }))->is(false);
+        that($container['direct'])->is(123);
+
+        $container = new Container();
+        that($container->cache($cachefile, function (Container $container) {
+            $container->set('direct', static fn() => 456);
+            $this->fail('never called');
+        }))->is(true);
+        that($container['direct'])->is(123);
+
+        @unlink($cachefile);
+        $container = new Container();
+        that($container->cache($cachefile, function (Container $container) {
+            $container->set('direct', static fn() => 123);
+            return true;
+        }))->is(false);
+        that($container['direct'])->is(123);
+
+        $container = new Container();
+        that($container->cache($cachefile, function (Container $container) {
+            $container->set('direct', static fn() => 456);
+        }))->is(false);
+        that($container['direct'])->is(456);
+
+        @unlink($cachefile);
+        $container = new Container();
+        that($container->cache($cachefile, function (Container $container) use ($configfile1, $configfile2) {
+            $container->set('direct', static fn() => 789);
+            $container->include($configfile1);
+            $container->include($configfile2);
+        }))->is(false);
+        that($cachefile)->fileExists();
+
+        $container = new Container();
+        that($container->cache($cachefile, fn() => $this->fail('never called')))->is(true);
+        that($container['direct'])->is(789);
+        that($container->has('unset'))->is(false);
+        that($container['string'])->is('cache');
+        that($container['float'])->is(M_PI);
+        that($container['array'])->is(['a' => 'A', 'b' => 'B']);
+        that($container['lazy'])->is(['a' => 'A', 'b' => 'B']);
+        that($container['stdclass'])->is((object) ['x' => 'X']);
+        that($container['callable'](2))->is(369);
+        that($container['bound']())->method()->is('method');
+        that($container['anonymous']->string())->is('cache');
+        that($container['misc.alias'])->is('alias');
+        that($container['A'])->is('alias');
+        that($container['misc.empty'])->is([]);
+        that($container['misc.magic'])->is([dirname($configfile1), $configfile1, 'cache']);
+        that(defined('CNAME1'))->is(false);
+        that(constant('CNAME2'))->is('const2');
+
+        $container = new Container();
+        $container->set('set', new ArrayObject());
+        that($container)->cache(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'dummy.php', fn() => 'dummy')->isThrowable('is not supported Object');
+
+        $container = new Container();
+        $container->set('set', STDOUT);
+        that($container)->cache(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'dummy.php', fn() => 'dummy')->isThrowable('is not supported Resource');
+    }
+
     function test_alias()
     {
         $container = new Container();

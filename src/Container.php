@@ -235,34 +235,132 @@ class Container implements ContainerInterface, ArrayAccess
         return self::$novalue;
     }
 
-    public function define(): array
+    public function cache(string $filename, Closure $initializer): bool
     {
-        $array_find_recursive = function ($array, $keys) use (&$array_find_recursive) {
-            $founds = [];
-            foreach ($array as $key => $value) {
-                if (is_array($value)) {
-                    $founds += $array_find_recursive($value, array_merge($keys, [$key]));
-                }
-                elseif ($value instanceof Closure && isset($this->closureMetadata[$value])) {
-                    if (property_exists($this->closureMetadata[$value], 'const')) {
-                        $id          = implode($this->delimiter, array_merge($keys, [$key]));
-                        $founds[$id] = $this->closureMetadata[$value];
-                    }
-                }
+        if (is_readable($filename)) {
+            assert(!$this->entries);
+            // if debug mode, fall through for syntax check
+            $debugMode = require $filename;
+            if (!$debugMode) {
+                return true;
             }
-            return $founds;
-        };
-
-        $defined = [];
-        foreach ($array_find_recursive($this->entries, []) as $id => $metadata) {
-            $cname = $metadata->const ?? strtr(strtoupper($id), [$this->delimiter => '\\']);
-            $value = $this->get($id);
-
-            $defined[$cname] = $value;
-            define($cname, $value);
         }
 
-        return $defined;
+        $debugMode = $initializer($this, $filename) ?? false;
+
+        $export = function ($value, $nest = 0, $parents = []) use (&$export) {
+            $spacer0    = str_repeat(" ", 4 * max(0, $nest + 0));
+            $spacer1    = str_repeat(" ", 4 * max(0, $nest + 1));
+            $raw_export = fn($v) => $v;
+            $var_export = fn($v) => var_export($v, true);
+
+            if ($value === $this) {
+                return "\$this";
+            }
+            if (is_array($value)) {
+                $value = array_filter($value, fn($v) => $v !== self::$novalue);
+                if (!$value) {
+                    return '[]';
+                }
+
+                $keys   = array_map($var_export, array_combine($keys = array_keys($value), $keys));
+                $maxlen = max(array_map('strlen', $keys ?: ['']));
+                $kvl    = [];
+                foreach ($value as $k => $v) {
+                    $keystr = $keys[$k] . str_repeat(" ", $maxlen - strlen($keys[$k])) . " => ";
+                    $valstr = $export($v, $nest + 1, array_merge($parents, [$k]));
+                    $kvl[]  = $keystr . $valstr;
+                }
+                $kvl = implode(",\n{$spacer1}", $kvl);
+                return "[\n{$spacer1}{$kvl},\n{$spacer0}]";
+            }
+            if ($value instanceof Closure) {
+                if (($this->closureMetadata[$value]->returnType ?? null) === 'unsettled') {
+                    return $export($value($this, $parents), $nest, $parents);
+                }
+                $ref  = new ReflectionFunction($value);
+                $bind = $ref->getClosureThis();
+                assert($bind === null || $bind === $this);
+
+                [$meta, $body] = Utility::callable_code($value);
+                $arrow  = str_starts_with($meta, 'fn') ? ' => ' : ' ';
+                $tokens = array_slice(Utility::php_tokens("<?php $meta{$arrow}$body;", TOKEN_PARSE), 1, -1);
+
+                $statics = $ref->getStaticVariables(); // to getClosureUsedVariables in future scope
+                $uses    = [];
+                foreach ($tokens as $n => $token) {
+                    if ($token->id === T_VARIABLE) {
+                        $varname = substr($token->text, 1);
+                        if (array_key_exists($varname, $statics) && !isset($uses[$varname])) {
+                            $recurself      = $statics[$varname] === $value ? '&' : '';
+                            $uses[$varname] = "$spacer1\$$varname = $recurself{$export($statics[$varname], $nest + 1, $parents)};\n";
+                        }
+                    }
+
+                    $tokens[$n] = $token->clone(text: $token->resolve($ref));
+                }
+
+                $code = implode('', array_column($tokens, 'text'));
+                if (!@$value->bindTo($this)) {
+                    $code = "static $code";
+                }
+
+                $attrs = [];
+                foreach ($ref->getAttributes() as $attr) {
+                    $attrs[] = "#[{$raw_export($attr->getName())}({$raw_export(implode(', ', array_map($export, $attr->getArguments())))})]";
+                }
+                $attrs = $attrs ? (implode(' ', $attrs) . ' ') : '';
+                $code  = "$attrs$code";
+
+                if (!$uses) {
+                    return $code;
+                }
+                return "(function () {\n{$raw_export(implode('', $uses))}{$spacer1}return $code;\n$spacer0})()";
+            }
+            if (is_object($value)) {
+                if ($value instanceof LazyValue) {
+                    return $export($value->___resolve(), $nest, $parents);
+                }
+                if (get_class($value) === stdClass::class) {
+                    return "(object) {$export((array) $value, $nest, $parents)}";
+                }
+                /** @noinspection PhpElementIsNotAvailableInCurrentPhpVersionInspection */
+                if ($value instanceof \UnitEnum) {
+                    return "\\" . $var_export($value); // @codeCoverageIgnore under php8.1
+                }
+
+                throw self::newContainerException('[%s] cache is not supported Object. use fn() => Object', implode($this->delimiter, $parents));
+            }
+            if (is_resource($value)) {
+                throw self::newContainerException('[%s] cache is not supported Resource. use fn() => Resource', implode($this->delimiter, $parents));
+            }
+
+            return is_null($value) ? 'null' : $var_export($value);
+        };
+
+        $constants = implode("\n", array_map(fn($v, $k) => "define({$export($k)}, {$export($v)});", $c = $this->constants(), array_keys($c)));
+
+        file_put_contents($filename, <<<PHP
+            <?php
+            // constants
+            $constants
+            // aliases
+            \$this->aliases = {$export($this->aliases, 0)};
+            // entries
+            \$this->entries = {$export($this->entries, 0)};
+            // debugMode
+            return {$export($debugMode)};
+            PHP, LOCK_EX);
+        return false;
+    }
+
+    public function define(): array
+    {
+        $constants = $this->constants();
+        foreach ($constants as $cname => $value) {
+            define($cname, $value);
+        }
+        return $constants;
     }
 
     public function env(string ...$names): ?string
@@ -505,6 +603,35 @@ class Container implements ContainerInterface, ArrayAccess
             unset($this->settled[$id]);
         }
         return $entry;
+    }
+
+    private function constants(): array
+    {
+        $array_find_recursive = function ($array, $keys) use (&$array_find_recursive) {
+            $founds = [];
+            foreach ($array as $key => $value) {
+                if (is_array($value)) {
+                    $founds += $array_find_recursive($value, array_merge($keys, [$key]));
+                }
+                elseif ($value instanceof Closure && isset($this->closureMetadata[$value])) {
+                    if (property_exists($this->closureMetadata[$value], 'const')) {
+                        $id          = implode($this->delimiter, array_merge($keys, [$key]));
+                        $founds[$id] = $this->closureMetadata[$value];
+                    }
+                }
+            }
+            return $founds;
+        };
+
+        $constants = [];
+        foreach ($array_find_recursive($this->entries, []) as $id => $metadata) {
+            $cname = $metadata->const ?? strtr(strtoupper($id), [$this->delimiter => '\\']);
+            $value = $this->get($id);
+
+            $constants[$cname] = $value;
+        }
+
+        return $constants;
     }
 
     private function factory(array $keys, $entry, ?bool &$dynamic = false)
