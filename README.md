@@ -26,16 +26,16 @@
     - 「DI コンテナ（＋設定ファイル）」ではなく「設定ファイル（＋DI コンテナ）」です
     - つまり「DI コンテナを設定ファイルのように使いたい」ではなく「設定ファイルを DI コンテナのように使いたい」が基本コンセプトです
 - **ミニマム・コンパクト**
-    - 複雑な依存は廃し、完全無依存（除 psr11）＋単一ファイルで構成されます
+    - 複雑な依存は廃し、完全無依存（除 psr11）＋数ファイルで構成されます
     - 最悪の場合は「コピペでコードベースを変更できる」を仮定しています（依存が大量でファイルが100を超えていたりするとこうは行かない）
 - **シンプル**
     - 「あらゆる注入をサポートする」のではなく、「DI コンテナに合わせてクラス設計する」という方針です。あまり無節操に外部のオブジェクトを取り込むような設計ではありません
     - サポートする機能は「コンストラクタインジェクション」「フィールドインジェクション」「オートワイヤリング」だけです
     - 「セッターインジェクション」「アノテーション」「メソッドコール」などは実装されていませんし、今後実装する予定もありません
-    - コンパイル・変換・キャッシュなどはありません。十分に高速です
+    - コンパイル・変換などはありません。十分に高速です
 - **簡潔**
-    - 設定ファイルの記法は「値を書く」か「クロージャを書く」かだけです（利便性のための糖衣構文はある）
-    - 値の場合はそのまま活かされますし、クロージャの場合は遅延実行されます
+    - 設定ファイルの記法は「値を書く」か「クロージャ（ファクトリ）を書く」かだけです（利便性のための糖衣構文はある）
+    - 値の場合はそのまま活かされますし、クロージャ（ファクトリ）の場合は遅延実行されます
 
 ## Spec
 
@@ -45,13 +45,17 @@
     - 連想配列・連番配列の区別はありません。よって連番配列のマージは意図しない結果になることがあります
     - 完全に上書きされる配列を定義したい場合はクロージャで包むか array メソッドを使う必要があります
 - 「値」とは「クロージャ以外のすべて」を指します。値は設定したものがそのまま返されます
-- クロージャは例外なく遅延実行されます。つまり「必要になったその時」まで実行されません
+- クロージャは原則的に遅延実行されます。つまり「必要になったその時」まで実行されません
     - よってエントリにクロージャを設定したい場合は「クロージャを返すクロージャ」を設定する必要があります
     - クロージャの値としての型は「型宣言による返り値の型」です。これによりクロージャを実行せずとも型の判定を可能にしています
     - 返り値の型を記述しないと void となり、依存関係の解決の対象外となります
     - static クロージャにすると毎回同じインスタンスを返します。 static ではない普通のクロージャは毎回生成して返します
+- `closureAsFactory` を false にすると上記の前提がなくなり、クロージャは本当の「値」として扱われ、ファクトリのための遅延実行は #[Factory] 属性を使用します
+- `closureAsFactory` が true でも #[Entry] 属性を付与すると値になります
 - クロージャの引数は `(コンテナ, キー逆順)` で固定です
     - クロージャの引数で型検出はされない、ということです
+    - この仕様は設定のコンテキストのすべてのクロージャに適用されます
+- ファクトリの引数は `(...キー逆順)` で固定です
     - この仕様は設定のコンテキストのすべてのクロージャに適用されます
 
 ## Usage
@@ -101,9 +105,9 @@ return [
         'client' => $this->static(S3Client::class),
     ],
     'storage'  => [
-        'private' => static fn($c, $key) => new Storage($c['s3.client'], $key),
-        'protect' => static fn($c, $key) => new Storage($c['s3.client'], $key),
-        'public'  => static fn($c, $key) => new Storage($c['s3.client'], $key),
+        'private' => #[Factory] fn($key) => new Storage($this['s3.client'], $key),
+        'protect' => #[Factory] fn($key) => new Storage($this['s3.client'], $key),
+        'public'  => #[Factory] fn($key) => new Storage($this['s3.client'], $key),
     ],
 ];
 ```
@@ -157,7 +161,8 @@ return [
 配列はマージされるため、この `$this->array` が無いと 0番目だけが上書きされた `['php', 'es', 'ts']` という値になってしまいます。
 このように配列を完全に上書きしたい場合は `$this->array` を使用します。
 
-また、 `storage` 以下のクロージャには自身へのキーの逆順が渡ってきています。
+また、 `storage` 以下のエントリは #[Factory] でファクトリを明示しています。
+#[Factory] を使うと引数が「そのエントリまでのキーパス」で可変引数で渡ってきます。
 このように引数を活用するとキー値を使うときに重複した記述を避けることができます。
 
 ### コンストラクタ
@@ -170,6 +175,7 @@ return [
 $container = new \ryunosuke\castella\Container([
     'debugInfo'            => null,
     'delimiter'            => '.',
+    'closureAsFactory'     => true,
     'autowiring'           => true,
     'constructorInjection' => true,
     'propertyInjection'    => true,
@@ -203,6 +209,24 @@ $container->extends([
 ```
 
 このようなとき、 `$container->get('a.b.c')` のようにアクセスできます。
+
+#### closureAsFactory: string
+
+false にするとクロージャも「値」とみなされます。
+クロージャが遅延実行されなくなるため、ファクトリとしての使用は #[Factory] 属性を付与します。
+
+```php
+$container->extends([
+    'closure' => fn() => "これはただのクロージャです",
+    'factory' => #[Factory] fn(...$keys) => "これはファクトリです",
+]);
+```
+
+このようなとき、 `$container->get('closure')` でクロージャがそのまま得られます。つまりファクトリとして働かないということです。
+`$container->get('factory')` でクロージャの結果が得られます。つまりファクトリとして働くということです。
+
+なお、 closureAsFactory:true でも #[Factory] 属性自体は使えます。
+その場合「ファクトリの明示」＋「引数の変化」という使い方になります。
 
 #### autowiring: bool
 
@@ -379,7 +403,7 @@ id は delimiter で潜ります。
 #### get(string $id): mixed
 
 エントリを取得します。
-取得されたエントリはクロージャが解決されており、完全なる値を得ることができます。
+取得されたエントリはクロージャ/ファクトリが解決されており、完全なる値を得ることができます。
 
 `$container->get('')` のように空文字を与えると全エントリを配列で得られますが推奨しません。
 これで得られる値は「配下すべてが解決済みの配列」であり、すべての遅延取得を無に帰す禁断の取得方法です。
@@ -392,6 +416,8 @@ id は delimiter で潜ります。
 実質的に `fn() => $container->get($id)` と同義です。
 
 「まだ使うか分からないのでクロージャでラップして取得したい」といった場合の糖衣構文として使えます。
+
+### エントリその他
 
 #### MagicAccess
 
@@ -413,6 +439,37 @@ ArrayAccess が実装されており、配列ライクなアクセスも可能�
 - $container['key'] = $val => $container->set('key', $val)
 - unset($container['key']) => 未サポート
 
+#### cache(string $filename, Closure $initializer): bool
+
+`$filename` が存在しないとき、`$initializer` を実行してその結果を `$filename` に書き出します。
+存在する場合は `$filename` を読むだけになり、`$initializer` は実行されません。
+
+ただし `$initializer` が true を返すと次回は `$filename` を読み込みつつも `$initializer` も実行されます。
+これは下記の要求を満たしたいためです。
+
+- 開発時は設定ファイルを変更したら自動で反映したい（キャッシュの破棄）
+- 開発時もファイルは生成して構文チェックくらいはしておきたい
+  - 無理して吐き出しているので、「開発時は $filename を読まない」という手法だと「本番でだけエラーが発生する」という事態になりかねない
+
+要するにキャッシュですが、非常に実験的な機能であり、今後予告なく変更・削除される可能性があります。
+そもそもよほど変なことをしない限り、キャッシュせずとも十分高速に動きます。
+
+```php
+$container->cache('/path/to/cached.php', function () use ($container) {
+    // 下記は2回目以降は呼ばれない
+    $container->mount('/path/to/config');  // mount したり
+    $container->include('/path/to/local'); // include したり
+    $container->set('entry', 'value');     // 直接 set したり
+    // このようにしておけば次回の読み込みを debugMode というエントリで制御できる
+    return $container['debugMode'];
+});
+```
+
+オブジェクトやリソースは書き出し出来ません。
+（include した場合はともかく、set や extends されるとそのオブジェクトの生成方法が分からなくなるため）。
+
+その代わりクロージャはそのまま活きるため `fn() => new Object()` 等とすれば遅延実行により実質的に同じ挙動にできます。
+
 ### ユーティリティ
 
 #### unset(): object
@@ -426,20 +483,20 @@ ArrayAccess が実装されており、配列ライクなアクセスも可能�
 <?php
 $container->extends([
     'array' => [
-        'hoge  => 'HOGE',
+        'hoge' => 'HOGE',
         'fuga' => 'FUGA',
         'nest' => [
-            'hoge  => 'HOGE',
+            'hoge' => 'HOGE',
             'fuga' => 'FUGA',
         ],
     ],
 ]);
 $container->extends([
     'array' => [
-        'hoge  => $container->unset(),
+        'hoge' => $container->unset(),
         'fuga' => 'FUGA',
         'nest' => [
-            'hoge  => $container->unset(),
+            'hoge' => $container->unset(),
             'fuga' => 'FUGA',
         ],
     ],
@@ -466,10 +523,10 @@ $container->extends([
 
 ```php
 <?php return [
-    'hoge  => $this->const('HOGE', 'CONST_NAME'),
+    'hoge' => $this->const('HOGE', 'CONST_NAME'),
     'fuga' => 'FUGA',
     'nest' => [
-        'hoge  => $this->const('HOGE'),
+        'hoge' => $this->const('HOGE'),
         'fuga' => 'FUGA',
     ],
 ];
@@ -584,7 +641,7 @@ object は親の `new Something()` インスタンスの setSomething が呼ば�
 #### callable(callable $entry): Closure
 
 与えられた callable をクロージャにするクロージャを返します。
-仕様上、クロージャを値として設定するためには「クロージャを返すクロージャ」を定義する必要がありますが、その時の糖衣構文です。
+closureAsFactory:true の場合、クロージャを値として設定するためには「クロージャを返すクロージャ」を定義する必要がありますが、その時の糖衣構文です。
 つまり、下記の callable1 と callable2 は同義となります。
 
 ```php
@@ -658,6 +715,13 @@ MIT
 ## Release
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
+
+### 2.0.2
+
+- [refactor] LazyValue のコンストラクタ修正
+- [feature] クロージャをファクトリとみなすかの closureAsFactory オプションを追加
+- [feature] cache を実装
+- [change] cache 実装のために ryunosuke/functions を追加
 
 ### 2.0.1
 
