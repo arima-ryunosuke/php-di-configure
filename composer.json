@@ -29,7 +29,8 @@
   },
   "require-dev": {
     "phpunit/phpunit": "9.*",
-    "ryunosuke/phpunit-extension": "4.*"
+    "ryunosuke/phpunit-extension": "4.*",
+    "ryunosuke/functions": "2.0.*"
   },
   "scripts": {
     "build": [
@@ -37,6 +38,12 @@
     ],
     "test": [
       "vendor/bin/phpunit --configuration=tests/phpunit.xml"
+    ],
+    "post-install-cmd": [
+      "exclude-internal"
+    ],
+    "post-update-cmd": [
+      "exclude-internal"
     ]
   }
 }
