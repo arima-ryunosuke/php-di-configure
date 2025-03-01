@@ -2,6 +2,7 @@
 
 namespace cache;
 
+use ryunosuke\castella\Attribute\Factory;
 use stdClass as SC;
 
 $local = 123;
@@ -25,7 +26,7 @@ return [
     'callable'  => $this->callable(function ($x) use ($local) {
         return $x * 123 + $local;
     }),
-    'bound'     => function () {
+    'bound'     => #[Factory(once: false)] function () {
         $object = new class () {
             function method()
             {
@@ -34,7 +35,7 @@ return [
         };
         return (fn() => $this)->bindTo($object);
     },
-    'anonymous' => static fn($c) => new class($c) extends SC {
+    'anonymous' => #[Factory(once: true)] fn() => new class($this) extends SC {
         public function __construct(private \ryunosuke\castella\Container $c) { }
 
         public function string()

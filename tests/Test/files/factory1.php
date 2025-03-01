@@ -4,7 +4,7 @@
  * @var ryunosuke\castella\Container $this
  */
 
-use ryunosuke\castella\Attribute\Entry;
+use ryunosuke\castella\Attribute\Factory;
 
 return [
     'env'      => [
@@ -16,7 +16,7 @@ return [
         'rundir'    => '/var/run/app',
         'datadir'   => '/var/opt/app',
         'extension' => ['js', 'es', 'ts'],
-        'logger'    => static fn($c) => new class ($c['env.loglevel'], $c['env.logdir']) {
+        'logger'    => #[Factory(true)] fn() => new class ($this['env.loglevel'], $this['env.logdir']) {
             private string $loglevel;
             private string $directory;
 
@@ -51,7 +51,7 @@ return [
         'user'          => 'user',
         'password'      => 'password',
         'charset'       => 'utf8mb4',
-        'connect'       => #[Entry] function (\PDO $pdo) { },
+        'connect'       => function (\PDO $pdo) { },
         'driverOptions' => [
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
         ],
@@ -65,9 +65,9 @@ return [
         'client' => $this->static(S3Client::class),
     ],
     'storage'  => [
-        'private' => static fn($c, $keys) => new Storage($c['s3.client'], $keys[0]),
-        'protect' => static fn($c, $keys) => new Storage($c['s3.client'], $keys[0]),
-        'public'  => static fn($c, $keys) => new Storage($c['s3.client'], $keys[0]),
+        'private' => #[Factory(true)] fn(...$keys) => new Storage($this['s3.client'], $keys[0]),
+        'protect' => #[Factory(true)] fn(...$keys) => new Storage($this['s3.client'], $keys[0]),
+        'public'  => #[Factory(true)] fn(...$keys) => new Storage($this['s3.client'], $keys[0]),
     ],
     'chain'    => [
         'x' => new stdClass(),

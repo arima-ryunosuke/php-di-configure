@@ -25,6 +25,7 @@ use Recursive2;
 use ReflectionType;
 use Required;
 use Required2;
+use ryunosuke\castella\Attribute\Factory;
 use ryunosuke\castella\Container;
 use S3Client;
 use SplTempFileObject;
@@ -729,13 +730,13 @@ class ContainerTest extends AbstractTestCase
         $container     = new Container();
         $container->extends([
             'lazy' => [
-                'yield'  => $yield = $container->yield(ArrayObject::class, [
+                'yield'  => $container->yield(ArrayObject::class, [
                     function ($c, $keys) use (&$yieldCounter) {
                         $yieldCounter++;
                         return $keys;
                     },
                 ]),
-                'static' => $static = $container->static(ArrayObject::class, [
+                'static' => $container->static(ArrayObject::class, [
                     function ($c, $keys) use (&$staticCounter) {
                         $staticCounter++;
                         return $keys;
@@ -743,9 +744,6 @@ class ContainerTest extends AbstractTestCase
                 ]),
             ],
         ]);
-
-        that(@Closure::bind($yield, $this))->isNotNull();
-        that(@Closure::bind($static, $this))->isNull();
 
         that($container->get('lazy.yield'))->is(new ArrayObject(['yield', 'lazy']));
         that($container->get('lazy.static'))->is(new ArrayObject(['static', 'lazy']));
@@ -1028,6 +1026,29 @@ class ContainerTest extends AbstractTestCase
         that($container)->factory(['a', 'b', 'c'], $closure)->is(['a', 'b', 'c']);
         that($container)->factory(['x', 'y', 'z'], $closure)->is(['a', 'b', 'c']);
         that($counter)->is(1);
+
+        $counter = 0;
+        $closure = #[Factory(false)] function (...$keys) use (&$counter) {
+            $counter++;
+            return $keys;
+        };
+        that($container)->factory(['a', 'b', 'c'], $closure)->is(['a', 'b', 'c']);
+        that($container)->factory(['x', 'y', 'z'], $closure)->is(['x', 'y', 'z']);
+        that($counter)->is(2);
+
+        $counter = 0;
+        $closure = #[Factory(true)] function (...$keys) use (&$counter) {
+            $counter++;
+            return $keys;
+        };
+        that($container)->factory(['a', 'b', 'c'], $closure)->is(['a', 'b', 'c']);
+        that($container)->factory(['x', 'y', 'z'], $closure)->is(['a', 'b', 'c']);
+        that($counter)->is(1);
+
+        $container = new Container(['closureAsFactory' => false]);
+
+        $closure = fn() => null;
+        that($container)->factory(['a', 'b', 'c'], $closure)->isSame($closure);
     }
 
     function test_instance()
@@ -1215,11 +1236,123 @@ class ContainerTest extends AbstractTestCase
         that($container)->get(NoneResolve::class)->isThrowable('in NoneResolve');
     }
 
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     function test_integration()
     {
         $container = new Container();
         $container->include(__DIR__ . '/files/config1.php');
         $container->include(__DIR__ . '/files/config2.php');
+        $container->set(SplTempFileObject::class, $container->yield(SplTempFileObject::class));
+
+        that($container->define())->is([
+            "LOCAL_IP"      => "127.0.0.1",
+            "DB_IP"         => "127.0.0.2",
+            "DATABASE\\CIP" => "127.0.0.3",
+        ]);
+        that(constant("LOCAL_IP"))->is("127.0.0.1");
+        that(constant("DB_IP"))->is("127.0.0.2");
+        that(constant("DATABASE\\CIP"))->is("127.0.0.3");
+
+        $env    = $container['env'];
+        $logger = $env['logger'];
+        unset($env['logger']);
+        that($logger->__debugInfo())->is([
+            "loglevel"  => "debug",
+            "directory" => "/var/log/app",
+        ]);
+        that($env)->is([
+            'ip'        => '127.0.0.1',
+            'name'      => 'local',
+            'origin'    => 'http://localhost',
+            'loglevel'  => 'debug',
+            'logdir'    => '/var/log/app',
+            'rundir'    => '/var/run/app',
+            'datadir'   => '/var/opt/app',
+            'extension' => ['js'],
+        ]);
+
+        $database = $container['database'];
+        $logger   = $database['logger'];
+        unset($database['logger']);
+        that($logger->__debugInfo())->is([
+            "loglevel"  => "error",
+            "directory" => "/var/log/app",
+        ]);
+        that($database)->is([
+            'ip'            => '127.0.0.2',
+            'cip'           => '127.0.0.3',
+            'driver'        => 'pdo_mysql',
+            'host'          => '127.0.0.1',
+            'port'          => 3306,
+            'dbname'        => 'app',
+            'user'          => 'app',
+            'password'      => 'p@ssword',
+            'charset'       => 'utf8mb4',
+            'connect'       => function () { },
+            'driverOptions' => [
+                \PDO::ATTR_ERRMODE           => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_EMULATE_PREPARES  => false,
+                \PDO::ATTR_STRINGIFY_FETCHES => false,
+            ],
+            'loglevel'      => 'debug',
+        ]);
+
+        that($container['s3.config'])->is([
+            'region'  => 'ap-northeast-1',
+            'version' => '2006-03-01',
+        ]);
+
+        that($container['storage.private']->bucket)->is('private');
+        that($container['storage.protect']->bucket)->is('protect');
+        that($container['storage.public']->bucket)->is('public');
+        that($container['storage.local1']->bucket)->is('local1');
+        that($container['storage.local2']->bucket)->is('local2');
+        that($container['storage.local3']->bucket)->is('default');
+
+        that($container['storage.private']->client)->isSame($container['s3.client']);
+        that($container['storage.protect']->client)->isSame($container['s3.client']);
+        that($container['storage.public']->client)->isSame($container['s3.client']);
+        that($container['storage.local1']->client)->isSame($container['s3.client']);
+        that($container['storage.local2']->client)->isSame($container['s3.client']);
+        that($container['storage.local3']->client)->isSame($container['s3.client']);
+
+        that($container['storage.local1']->tmpfile)->isNotSame($container[SplTempFileObject::class]);
+        that($container['storage.local2']->tmpfile)->isNotSame($container[SplTempFileObject::class]);
+        that($container['storage.local3']->tmpfile)->isNotSame($container[SplTempFileObject::class]);
+
+        that($container['storage.protect'])->isNotSame($container['storage.private']);
+        that($container['storage.public'])->isNotSame($container['storage.private']);
+        that($container['storage.local1'])->isNotSame($container['storage.private']);
+        that($container['storage.local2'])->isNotSame($container['storage.private']);
+        that($container['storage.local3'])->isNotSame($container['storage.private']);
+
+        that($container['chain.x'])->isSame($container['chain.y']);
+        that($container['chain.y'])->isSame($container['chain.z']);
+        that($container['chain.z'])->isSame($container['chain.x']);
+
+        $phpstorm_meta_php = __DIR__ . '/files/.phpstorm.meta.php';
+        @unlink($phpstorm_meta_php);
+        $container->annotate($phpstorm_meta_php);
+        $first = file_get_contents($phpstorm_meta_php);
+        $container->annotate($phpstorm_meta_php);
+        $second = file_get_contents($phpstorm_meta_php);
+        that($first)->is($second);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    function test_integration_factory()
+    {
+        $container = new Container([
+            'closureAsFactory' => false,
+        ]);
+        $container->include(__DIR__ . '/files/factory1.php');
+        $container->include(__DIR__ . '/files/factory2.php');
         $container->set(SplTempFileObject::class, $container->yield(SplTempFileObject::class));
 
         that($container->define())->is([

@@ -20,6 +20,8 @@ use ReflectionProperty;
 use ReflectionType;
 use ReflectionUnionType;
 use RuntimeException;
+use ryunosuke\castella\Attribute\Entry;
+use ryunosuke\castella\Attribute\Factory;
 use stdClass;
 use Throwable;
 use WeakMap;
@@ -33,6 +35,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     private ?string $debugInfo;
     private string  $delimiter;
+    private bool    $closureAsFactory;
     private bool    $autowiring;
     private bool    $constructorInjection;
     private bool    $propertyInjection;
@@ -51,6 +54,7 @@ class Container implements ContainerInterface, ArrayAccess
 
         $this->debugInfo            = $options['debugInfo'] ?? null;
         $this->delimiter            = $options['delimiter'] ?? '.';
+        $this->closureAsFactory     = $options['closureAsFactory'] ?? true; // for compatible. to false or delete in future scope
         $this->autowiring           = $options['autowiring'] ?? true;
         $this->constructorInjection = $options['constructorInjection'] ?? true;
         $this->propertyInjection    = $options['propertyInjection'] ?? true;
@@ -276,7 +280,7 @@ class Container implements ContainerInterface, ArrayAccess
             }
             if ($value instanceof Closure) {
                 if (($this->closureMetadata[$value]->returnType ?? null) === 'unsettled') {
-                    return $export($value($this, $parents), $nest, $parents);
+                    return $export($value(...$parents), $nest, $parents);
                 }
                 $ref  = new ReflectionFunction($value);
                 $bind = $ref->getClosureThis();
@@ -376,7 +380,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function const(mixed $value, ?string $name = null): Closure
     {
-        $closure                         = static fn() => $value;
+        $closure                         = #[Factory(true)] fn() => $value;
         $this->closureMetadata[$closure] = (object) [
             'dynamic' => false,
             'const'   => $name,
@@ -396,7 +400,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function yield(string $classname, array $arguments = []): Closure
     {
-        $closure                         = fn(self $c) => $c->instance($classname, $arguments, false);
+        $closure                         = #[Factory(false)] fn() => $this->instance($classname, $arguments, false);
         $this->closureMetadata[$closure] = (object) [
             'dynamic'    => true,
             'returnType' => ltrim($classname, '\\'),
@@ -406,7 +410,7 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function static(string $classname, array $arguments = []): Closure
     {
-        $closure                         = static fn(self $c) => $c->instance($classname, $arguments, false);
+        $closure                         = #[Factory(true)] fn() => $this->instance($classname, $arguments, false);
         $this->closureMetadata[$closure] = (object) [
             'dynamic'    => false,
             'returnType' => ltrim($classname, '\\'),
@@ -417,12 +421,12 @@ class Container implements ContainerInterface, ArrayAccess
     public function parent(callable $callback): Closure
     {
         $parents                         = $this->entries;
-        $closure                         = static function (self $c, $keys) use ($callback, $parents) {
+        $closure                         = #[Factory(true)] function (...$keys) use ($callback, $parents) {
             $entry = $parents;
             foreach (array_reverse($keys) as $key) {
                 $entry = $entry[$key] ?? null;
             }
-            return $callback($c->factory($keys, $entry), $c);
+            return $callback($this->factory($keys, $entry));
         };
         $this->closureMetadata[$closure] = (object) [
             'dynamic'    => false,
@@ -433,12 +437,12 @@ class Container implements ContainerInterface, ArrayAccess
 
     public function callable(callable $entry): Closure
     {
-        return static fn(): Closure => Closure::fromCallable($entry);
+        return #[Factory(true)] fn(): Closure => Closure::fromCallable($entry);
     }
 
     public function array(array $entry): Closure
     {
-        return fn(self $c, $keys): array => array_map(fn($v) => $c->factory($keys, $v), $entry);
+        return #[Factory(false)] fn(...$keys): array => array_map(fn($v) => $this->factory($keys, $v), $entry);
     }
 
     public function annotate(?string $filename = null): array
@@ -644,13 +648,23 @@ class Container implements ContainerInterface, ArrayAccess
             return $entry;
         }
 
-        $metadata = $this->closureMetadata[$entry] ??= (object) [];
+        $entryAttr   = Entry::single($entry);
+        $factoryAttr = Factory::single($entry);
 
-        $dynamic = $metadata->dynamic ??= !!@$entry->bindTo($this);
+        if ((!$this->closureAsFactory && !$factoryAttr) || ($this->closureAsFactory && $entryAttr)) {
+            return $entry;
+        }
+
+        $metadata = $this->closureMetadata[$entry] ??= (object) [];
+        $dynamic  = $metadata->dynamic ??= !(($factoryAttr?->newInstance()?->getArguments()['once'] ?? !@$entry->bindTo($this)));
+
         if (!$dynamic && property_exists($metadata, 'result')) {
             return $metadata->result;
         }
 
+        if ($factoryAttr) {
+            return $metadata->result = $entry->call($this, ...$keys);
+        }
         return $metadata->result = $entry($this, $keys);
     }
 
