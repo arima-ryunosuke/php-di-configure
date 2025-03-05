@@ -206,7 +206,7 @@ class Container implements ContainerInterface, ArrayAccess
     public function get(string $id)
     {
         if ($this->including) {
-            return new LazyValue(fn() => $this[$id]);
+            return new LazyValue($this, $id);
         }
 
         try {

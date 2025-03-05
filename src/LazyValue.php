@@ -3,23 +3,17 @@
 namespace ryunosuke\castella;
 
 use ArrayAccess;
-use Closure;
 use LogicException;
 
 class LazyValue implements ArrayAccess
 {
-    private Closure $provider;
-
     private array $lazy = [];
 
-    public function __construct(Closure $initialValueProvider)
-    {
-        $this->provider = $initialValueProvider;
-    }
+    public function __construct(private Container $container, private string $id) { }
 
     public function ___resolve()
     {
-        $value = ($this->provider)();
+        $value = $this->container->get($this->id);
         foreach ($this->lazy as [$method, $arguments]) {
             $value = match ($method) {
                 'offsetGet' => $value[$arguments[0]],
