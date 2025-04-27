@@ -8,7 +8,23 @@ use ryunosuke\castella\LazyValue;
 
 class LazyValueTest extends AbstractTestCase
 {
-    function test_all()
+    function test___debugInfo()
+    {
+        $container = new Container();
+
+        $lazyValue = new LazyValue($container, 'parent.key');
+        $lazyValue = $lazyValue['x'];
+        $lazyValue = $lazyValue->y;
+        $lazyValue = $lazyValue->z(1, 2, x: 3);
+        $lazyValue = $lazyValue(4, 5, x: 6);
+
+        ob_start();
+        var_dump($lazyValue);
+        $var_dump = ob_get_clean();
+        that($var_dump)->stringContains('$this[parent.key][x]->y->z(1, 2, x: 3)(4, 5, x: 6)');
+    }
+
+    function test____resolve()
     {
         $container = new Container();
 

@@ -59,17 +59,84 @@ class ContainerTest extends AbstractTestCase
         $var_dump = ob_get_clean();
         that($var_dump)->stringContains('"entries":"ryunosuke\\castella\\Container":private');
         that($var_dump)->stringContains('"settled":"ryunosuke\\castella\\Container":private');
+    }
+
+    function test___debugInfo()
+    {
+        $entries = [
+            'plain' => 'plain',
+            'lazy1' => static fn() => 'lazy1',
+            'lazy2' => static fn() => 'lazy2',
+            'nest'  => [
+                1 => 'nest1',
+            ],
+        ];
 
         $container = new Container([
             'debugInfo' => 'settled',
         ]);
-        $container->extends(['x' => 'Z']);
+        $container->extends($entries);
 
+        $container->get('lazy1');
         ob_start();
         var_dump($container);
         $var_dump = ob_get_clean();
-        that($var_dump)->stringContains('["x"]');
-        that($var_dump)->stringContains('string(1) "Z"');
+        that($var_dump)->stringContains(<<<DUMP
+                ["plain"]=>
+                string(5) "plain"
+            DUMP
+        );
+        that($var_dump)->stringContains(<<<DUMP
+                ["lazy1"]=>
+                string(5) "lazy1"
+            DUMP
+        );
+        that($var_dump)->stringContains(<<<DUMP
+                ["lazy2"]=>
+                string(5) "lazy2"
+            DUMP
+        );
+        that($var_dump)->stringContains(<<<DUMP
+                ["nest"]=>
+                array(1) {
+                  [1]=>
+                  string(5) "nest1"
+                }
+            DUMP
+        );
+
+        $container = new Container([
+            'debugInfo' => 'current',
+        ]);
+        $container->extends($entries);
+
+        $container->get('lazy1');
+        ob_start();
+        var_dump($container);
+        $var_dump = ob_get_clean();
+        that($var_dump)->stringContains(<<<DUMP
+              ["plain"]=>
+              string(5) "plain"
+            DUMP
+        );
+        that($var_dump)->stringContains(<<<DUMP
+              ["lazy1"]=>
+              string(5) "lazy1"
+            DUMP
+        );
+        that($var_dump)->stringContains(<<<DUMP
+              ["lazy2"]=>
+              object(Closure)#
+            DUMP
+        );
+        that($var_dump)->stringContains(<<<DUMP
+              ["nest"]=>
+              array(1) {
+                [1]=>
+                string(5) "nest1"
+              }
+            DUMP
+        );
     }
 
     function test_extend()

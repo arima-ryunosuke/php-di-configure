@@ -11,6 +11,29 @@ class LazyValue implements ArrayAccess
 
     public function __construct(private Container $container, private string $id) { }
 
+    public function __debugInfo(): array
+    {
+        $argumentify = function ($args) {
+            $i     = 0;
+            $stmts = [];
+            foreach ($args as $n => $arg) {
+                $stmts[] = ($n === $i++ ? var_export($arg, true) : "$n: " . var_export($arg, true));
+            }
+            return implode(', ', $stmts);
+        };
+
+        $statement = "\$this[{$this->id}]";
+        foreach ($this->lazy as [$method, $arguments]) {
+            $statement .= match ($method) {
+                'offsetGet' => "[{$arguments[0]}]",
+                '__get'     => "->{$arguments[0]}",
+                '__invoke'  => "({$argumentify($arguments)})",
+                default     => "->{$method}({$argumentify($arguments)})",
+            };
+        }
+        return ['' => $statement];
+    }
+
     public function ___resolve()
     {
         $value = $this->container->get($this->id);

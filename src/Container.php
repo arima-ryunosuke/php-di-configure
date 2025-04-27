@@ -71,6 +71,16 @@ class Container implements ContainerInterface, ArrayAccess
             return (array) $this;
         }
 
+        // current resolved entries
+        if ($this->debugInfo === 'current') {
+            return self::walkRecursive($this->entries, function (&$value, $key, $array, $keys) {
+                $id = implode($this->delimiter, array_merge($keys, [$key]));
+                if (array_key_exists($id, $this->settled)) {
+                    $value = $this->settled[$id];
+                }
+            });
+        }
+
         // resolve all value
         if ($this->debugInfo === 'settled') {
             $this->get('');
@@ -867,6 +877,27 @@ class Container implements ContainerInterface, ArrayAccess
             return var_export($value, true);
         };
         return $describe($value, $nest);
+    }
+
+    private static function walkRecursive(array $array, callable $callback): array
+    {
+        $main = function (&$array, $keys) use (&$main, $callback) {
+            foreach ($array as $k => &$v) {
+                if (is_array($v)) {
+                    if ($main($v, array_merge($keys, [$k])) === false) {
+                        return false;
+                    }
+                }
+                else {
+                    if ($callback($v, $k, $array, $keys) === false) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        $main($array, []);
+        return $array;
     }
 
     private static function matchReflectionType($type, ReflectionType $targetType): bool
