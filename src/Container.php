@@ -78,7 +78,7 @@ class Container implements ContainerInterface, ArrayAccess
                 if (array_key_exists($id, $this->settled)) {
                     $value = $this->settled[$id];
                 }
-            });
+            }, false);
         }
 
         // resolve all value
@@ -458,17 +458,10 @@ class Container implements ContainerInterface, ArrayAccess
     public function annotate(?string $filename = null): array
     {
         $result = [];
-        $walk   = function (array $array, array $keys) use (&$walk, &$result) {
-            foreach ($array as $k => $v) {
-                $keyskey     = array_merge($keys, [$k]);
-                $id          = implode($this->delimiter, $keyskey);
-                $result[$id] = self::getTypeName($v);
-                if (is_array($v)) {
-                    $walk($v, $keyskey);
-                }
-            }
-        };
-        $walk($this->get(''), []);
+        self::walkRecursive($this->get(''), function ($value, $key, $array, $keys) use (&$result) {
+            $id          = implode($this->delimiter, array_merge($keys, [$key]));
+            $result[$id] = self::getTypeName($value);
+        }, true);
 
         foreach ($this->aliases as $alias => $id) {
             $result[$alias] = $result[$id];
@@ -621,24 +614,18 @@ class Container implements ContainerInterface, ArrayAccess
 
     private function constants(): array
     {
-        $array_find_recursive = function ($array, $keys) use (&$array_find_recursive) {
-            $founds = [];
-            foreach ($array as $key => $value) {
-                if (is_array($value)) {
-                    $founds += $array_find_recursive($value, array_merge($keys, [$key]));
-                }
-                elseif ($value instanceof Closure && isset($this->closureMetadata[$value])) {
-                    if (property_exists($this->closureMetadata[$value], 'const')) {
-                        $id          = implode($this->delimiter, array_merge($keys, [$key]));
-                        $founds[$id] = $this->closureMetadata[$value];
-                    }
+        $founds = [];
+        self::walkRecursive($this->entries, function ($value, $key, $array, $keys) use (&$founds) {
+            if ($value instanceof Closure && isset($this->closureMetadata[$value])) {
+                if (property_exists($this->closureMetadata[$value], 'const')) {
+                    $id          = implode($this->delimiter, array_merge($keys, [$key]));
+                    $founds[$id] = $this->closureMetadata[$value];
                 }
             }
-            return $founds;
-        };
+        }, false);
 
         $constants = [];
-        foreach ($array_find_recursive($this->entries, []) as $id => $metadata) {
+        foreach ($founds as $id => $metadata) {
             $cname = $metadata->const ?? strtr(strtoupper($id), [$this->delimiter => '\\']);
             $value = $this->get($id);
 
@@ -776,23 +763,16 @@ class Container implements ContainerInterface, ArrayAccess
             catch (NotFoundExceptionInterface) {
                 // do nothing
             }
-            $walk = function (array $array, array $keys, &$found = null) use (&$walk, $detect, $type, $message) {
-                foreach ($array as $k => $v) {
-                    if (is_array($v)) {
-                        $walk($v, array_merge($keys, [$k]), $found);
+            $found = null;
+            self::walkRecursive($this->entries, function ($value, $key, $array, $keys) use (&$found, $detect, $type, $message) {
+                $id = implode($this->delimiter, array_merge($keys, [$key]));
+                if (self::matchReflectionType($detect($id, $value), $type)) {
+                    if ($found !== null) {
+                        throw self::newContainerException($message());
                     }
-                    else {
-                        $id = implode($this->delimiter, array_merge($keys, [$k]));
-                        if (self::matchReflectionType($detect($id, $v), $type)) {
-                            if ($found !== null) {
-                                throw self::newContainerException($message());
-                            }
-                            $found = $id;
-                        }
-                    }
+                    $found = $id;
                 }
-            };
-            $walk($this->entries, [], $found);
+            }, false);
             return $this->get($found ?? $id);
         }
         catch (NotFoundExceptionInterface) {
@@ -879,17 +859,17 @@ class Container implements ContainerInterface, ArrayAccess
         return $describe($value, $nest);
     }
 
-    private static function walkRecursive(array $array, callable $callback): array
+    private static function walkRecursive(array $array, callable $callback, bool $callArray): array
     {
-        $main = function (&$array, $keys) use (&$main, $callback) {
+        $main = function (&$array, $keys) use (&$main, $callback, $callArray) {
             foreach ($array as $k => &$v) {
-                if (is_array($v)) {
-                    if ($main($v, array_merge($keys, [$k])) === false) {
+                if ($callArray || !is_array($v)) {
+                    if ($callback($v, $k, $array, $keys) === false) {
                         return false;
                     }
                 }
-                else {
-                    if ($callback($v, $k, $array, $keys) === false) {
+                if (is_array($v)) {
+                    if ($main($v, array_merge($keys, [$k])) === false) {
                         return false;
                     }
                 }

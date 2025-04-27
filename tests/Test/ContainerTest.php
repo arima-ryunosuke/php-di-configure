@@ -1207,6 +1207,85 @@ class ContainerTest extends AbstractTestCase
         that($container)->describeValue([$object, $object])->stringContains("stdClass#$id {...}");
     }
 
+    function test_walkRecursive()
+    {
+        $array = [
+            'empty' => [],
+            'a'     => [
+                'b' => [
+                    'c' => ['a', 'b', 'c'],
+                ],
+            ],
+            'x'     => [
+                'y' => [
+                    'z' => ['x', 'y', 'z'],
+                ],
+            ],
+        ];
+
+        $container = new Container();
+
+        $callCount = 0;
+        that($container)->walkRecursive($array, function (&$value, $key, &$array, $keys) use (&$callCount) {
+            $callCount++;
+            $value = strtoupper($value);
+        }, false)->is([
+            'empty' => [],
+            'a'     => [
+                'b' => [
+                    'c' => ['A', 'B', 'C'],
+                ],
+            ],
+            'x'     => [
+                'y' => [
+                    'z' => ['X', 'Y', 'Z'],
+                ],
+            ],
+        ]);
+        that($callCount)->is(6);
+
+        $callCount = 0;
+        that($container)->walkRecursive($array, function (&$value, $key, &$array, $keys) use (&$callCount) {
+            $callCount++;
+            if ($keys === ['a', 'b', 'c'] && $key === 0) {
+                unset($array[$key]);
+                $array[] = 'd';
+            }
+            if ($keys === ['x', 'y', 'z'] && $key === 1) {
+                return false;
+            }
+            $value = strtoupper($value);
+        }, false)->is([
+            'empty' => [],
+            'a'     => [
+                'b' => [
+                    'c' => [1 => 'B', 'C', 'D'],
+                ],
+            ],
+            'x'     => [
+                'y' => [
+                    'z' => ['X', 'y', 'z'],
+                ],
+            ],
+        ]);
+        that($callCount)->is(6);
+
+        $callCount = 0;
+        that($container)->walkRecursive($array, function (&$value, $key, &$array, $keys) use (&$callCount) {
+            $callCount++;
+        }, true)->is($array);
+        that($callCount)->is(13);
+
+        $callCount = 0;
+        that($container)->walkRecursive($array, function (&$value, $key, &$array, $keys) use (&$callCount) {
+            $callCount++;
+            if ($keys === ['x', 'y'] && $key === 'z') {
+                return false;
+            }
+        }, true)->is($array);
+        that($callCount)->is(10);
+    }
+
     function test_matchReflectionType()
     {
         that(Container::class)::matchReflectionType(null, self::getReflectionType(I1::class))->isFalse();
