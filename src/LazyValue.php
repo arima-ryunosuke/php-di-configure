@@ -47,6 +47,22 @@ class LazyValue implements ArrayAccess
         return $value;
     }
 
+    public function ___closureize(): string
+    {
+        $V = fn($v) => var_export($v, true);
+
+        $statement = "fn() => \$this[{$V($this->id)}]";
+        foreach ($this->lazy as [$method, $arguments]) {
+            $statement .= match ($method) {
+                'offsetGet' => "[{$V($arguments[0])}]",
+                '__get'     => "->{{$V($arguments[0])}}",
+                '__invoke'  => "(...{$V($arguments)})",
+                default     => "->{{$V($method)}}(...{$V($arguments)})",
+            };
+        }
+        return $statement;
+    }
+
     public function __get(string $name): static
     {
         $this->lazy[] = [__FUNCTION__, [$name]];

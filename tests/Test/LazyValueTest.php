@@ -74,4 +74,55 @@ class LazyValueTest extends AbstractTestCase
         that($lazyValue['x']->y->method(1)(2))->isSame($lazyValue);
         that($lazyValue->___resolve())->isSame(3);
     }
+
+    function test____closureize()
+    {
+        $container = new Container();
+
+        $lazyValue = new LazyValue($container, 'parent.key');
+        $lazyValue = $lazyValue['x'];
+        $lazyValue = $lazyValue->y;
+        $lazyValue = $lazyValue->z(1, 2, x: 3);
+        $lazyValue = $lazyValue(4, 5, x: 6);
+
+        $closureString = $lazyValue->___closureize();
+        that($closureString)->is(<<<'STMT'
+            fn() => $this['parent.key']['x']->{'y'}->{'z'}(...array (
+              0 => 1,
+              1 => 2,
+              'x' => 3,
+            ))(...array (
+              0 => 4,
+              1 => 5,
+              'x' => 6,
+            ))
+            STMT
+        );
+        $closure = eval("return $closureString;");
+        that($closure->call(new class([
+            'parent.key' => [
+                'x' => new ArrayObject([
+                    'y' => new class() {
+                        public array $stack = [];
+
+                        public function z(...$args)
+                        {
+                            $this->stack[] = $args;
+                            return $this;
+                        }
+
+                        public function __invoke(...$args)
+                        {
+                            $this->stack[] = $args;
+                            return $this;
+                        }
+                    },
+                ], ArrayObject::ARRAY_AS_PROPS),
+            ],
+        ]) extends ArrayObject {
+        })->stack)->is([
+            [1, 2, 'x' => 3],
+            [4, 5, 'x' => 6],
+        ]);
+    }
 }

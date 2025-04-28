@@ -333,7 +333,7 @@ class Container implements ContainerInterface, ArrayAccess
             }
             if (is_object($value)) {
                 if ($value instanceof LazyValue) {
-                    return $export($value->___resolve(), $nest, $parents);
+                    return "#[{$raw_export(Factory::class)}] " . $value->___closureize();
                 }
                 if (get_class($value) === stdClass::class) {
                     return "(object) {$export((array) $value, $nest, $parents)}";

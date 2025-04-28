@@ -463,7 +463,9 @@ class ContainerTest extends AbstractTestCase
         that($container['string'])->is('cache');
         that($container['float'])->is(M_PI);
         that($container['array'])->is(['a' => 'A', 'b' => 'B']);
+        that($container['object']->name)->is('hoge');
         that($container['lazy'])->is(['a' => 'A', 'b' => 'B']);
+        that($container['lazyObject']->name)->is('fuga');
         that($container['stdclass'])->is((object) ['x' => 'X']);
         that($container['callable'](2))->is(369);
         that($container['bound']())->method()->is('method');
