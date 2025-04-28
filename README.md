@@ -187,12 +187,14 @@ $container = new \ryunosuke\castella\Container([
 
 `__debugInfo` の挙動を指定します。
 
-将来的な拡張のために string 型になっていますが、現在のところ null|"settled" の2拓です。
-null を与えると標準の var_dump（メンバーすべてが出る）になり、"settled" を与えるとエントリのみが出力されます。
+将来的な拡張のために string 型になっていますが、現在のところ null|"current"|"settled" の3択です。
 
-現在のデフォルトは null ですが、往々にして有用なのは "settled" のため、このデフォルト値は後々変更される可能性があります。
+- null: 標準の var_dump（メンバーすべてが出る）
+- "current": entries（解決済みのものはその値、未解決のものはそのまま出す）
+- "settled": entries（全て解決して出す）
+
+現在のデフォルトは null ですが、往々にして有用なのは "current" のため、このデフォルト値は後々変更される可能性があります。
 また、このデフォルト値の変更は互換性の担保に含まれません。
-つまり「ob_start で var_dump の出力結果をキャプチャ」のような処理があると互換性が壊れる可能性があります。
 
 #### delimiter: string
 
@@ -715,6 +717,12 @@ MIT
 ## Release
 
 バージョニングは [Romantic Versioning](https://github.com/romversioning/romver) に従います。
+
+### 2.0.3
+
+- [fixbug] オブジェクトの LazyValue が cache できない不具合
+- [refactor] 配列の再帰で似た個所が多かったので一本化
+- [feature] debugInfo のモードに current を追加
 
 ### 2.0.2
 
