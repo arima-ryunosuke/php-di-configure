@@ -841,14 +841,14 @@ class Utility
 
         if ($begin->is(T_FN)) {
             $meta = array_slice($tokens, $begin->index, $close->prev()->index - $begin->index + 1);
-            $temp = $close->find([';', ',']);
+            $temp = $close->find([';', ',', T_CLOSE_TAG]);
             // アロー関数は終了トークンが明確ではない
             // - $x = fn() => 123;         // セミコロン
             // - $x = fn() => [123];       // セミコロンであって ] ではない
             // - $x = [fn() => 123, null]; // こうだとカンマになるし
             // - $x = [fn() => 123];       // こうだと ] になる
             // しっかり実装できなくもないが、（多分）戻り読みが必要なのでここでは構文チェックをパスするまでループする実装とした
-            while (true) {
+            while ($temp) {
                 $test = array_slice($tokens, $close->next()->index, $temp->index - $close->next()->index);
                 $text = implode('', array_column($test, 'text'));
                 try {
@@ -860,7 +860,7 @@ class Utility
                     $temp = $temp->prev();
                 }
             }
-            $body = array_slice($tokens, $close->next()->index, $temp->index - $close->next()->index);
+            $body = array_slice($tokens, $close->next()->index, $temp ? $temp->index - $close->next()->index : null);
         }
         else {
             $meta = array_slice($tokens, $begin->index, $close->index - $begin->index);
@@ -885,6 +885,7 @@ class Utility
      * - getDeclaration: 宣言部のコードを返す
      * - getCode: 定義部のコードを返す
      * - isAnonymous: 無名関数なら true を返す（8.2 の isAnonymous 互換）
+     * - isArrow: アロー演算子で定義されたかを返す（クロージャのみ）
      * - isStatic: $this バインド可能かを返す（クロージャのみ）
      * - getUsedVariables: use している変数配列を返す（クロージャのみ）
      * - getClosure: 元となったオブジェクトを $object としたクロージャを返す（メソッドのみ）
@@ -989,6 +990,12 @@ class Utility
                     }
 
                     return strpos($this->name, '{closure}') !== false;
+                }
+
+                public function isArrow(): bool
+                {
+                    // しっかりやるなら PHPToken を使った方がいいけど今の php 構文ならこれで大丈夫のはず
+                    return str_starts_with($this->getDeclaration(), 'fn') !== false;
                 }
 
                 public function isStatic(): bool
@@ -1429,13 +1436,15 @@ class Utility
     /**
      * キーが json 化されてファイルシステムに永続化される ArrayAccess を返す
      *
-     * 非常にシンプルで PSR-16 も実装せず、TTL もクリア手段も（基本的には）存在しない。
+     * 非常にシンプルで PSR-16 も実装せず、クリア手段も（基本的には）存在しない。
      * ArrayAccess なので `$storage['hoge'] ??= something()` として使うのがほぼ唯一の利用法。
      * その仕様・利用上、値として null を使用することはできない（使用した場合の動作は未定義とする）。
      *
      * キーに指定できるのは json_encode 可能なもののみ。
      * 値に指定できるのは var_export 可能なもののみ。
      * 上記以外を与えたときの動作は未定義。
+     * TTL を指定すると次回読み込み時に期限切れをチェックし、切れていた場合 null を返す。
+     * 一度読み込まれればそのリクエスト中は期限切れになることはない。
      *
      * 得てして簡単な関数・メソッドのメモ化や内部的なキャッシュに使用する。
      *
@@ -1453,9 +1462,10 @@ class Utility
      * @package ryunosuke\Functions\Package\utility
      *
      * @param string $directory 永続化ディレクトリ
+     * @param int $ttl TTL
      * @return \ArrayObject
      */
-    public static function json_storage(string $prefix = 'global')
+    public static function json_storage(string $prefix = 'global', int $ttl = PHP_INT_MAX)
     {
         $cachedir = \ryunosuke\castella\Utility::function_configure('cachedir') . '/' . strtr(__FUNCTION__, ['\\' => '%']);
         if (!file_exists($cachedir)) {
@@ -1463,7 +1473,9 @@ class Utility
         }
 
         static $objects = [];
-        return $objects[$prefix] ??= new class("$cachedir/" . strtr($prefix, ['\\' => '%', '/' => '-'])) extends \ArrayObject {
+        $objects[$prefix] ??= new class("$cachedir/" . strtr($prefix, ['\\' => '%', '/' => '-'])) extends \ArrayObject {
+            public int $defaultTtl = PHP_INT_MAX;
+
             public function __construct(private string $directory)
             {
                 parent::__construct();
@@ -1487,10 +1499,10 @@ class Utility
                 $filename = $this->filename($json);
                 clearstatcache(true, $filename);
                 if (file_exists($filename)) {
-                    [$k, $v] = include $filename;
-                    // hash 化してるので万が一競合すると異なるデータを返してしまう
-                    if ($k !== $key) {
-                        return null; // @codeCoverageIgnore
+                    [$k, $v, $t] = include $filename;
+                    // TTL 兼 hash 化してるので万が一競合すると異なるデータを返してしまう
+                    if (($k !== $key) || ((time() - $t) >= $this->defaultTtl)) {
+                        return null;
                     }
                     // ストレージに有ったら内部キャッシュしてそれを使う
                     parent::offsetSet($json, $v);
@@ -1513,7 +1525,7 @@ class Utility
                         @unlink($filename);
                     }
                     else {
-                        file_put_contents($filename, '<?php return ' . var_export([$key, $value], true) . ';', LOCK_EX);
+                        file_put_contents($filename, '<?php return ' . var_export([$key, $value, time()], true) . ';', LOCK_EX);
                     }
                 }
 
@@ -1550,7 +1562,15 @@ class Utility
                 ]));
                 return "{$this->directory}-$filename.php-cache";
             }
+
+            /** @noinspection PhpUnusedPrivateMethodInspection */
+            private function debug($closure)
+            {
+                return $closure->call($this);
+            }
         };
+        $objects[$prefix]->defaultTtl = $ttl;
+        return $objects[$prefix];
     }
 
     /**
