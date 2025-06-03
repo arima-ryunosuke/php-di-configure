@@ -125,4 +125,13 @@ class LazyValueTest extends AbstractTestCase
             [4, 5, 'x' => 6],
         ]);
     }
+
+    function test___toString()
+    {
+        $container = new Container();
+        $container->set('hoge', 'HOGE');
+
+        $lazyValue = new LazyValue($container, 'hoge');
+        that("$lazyValue")->is('HOGE');
+    }
 }

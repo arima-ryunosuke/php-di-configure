@@ -201,6 +201,19 @@ class Container implements ContainerInterface, ArrayAccess
         return $this;
     }
 
+    public function raw(string $id): mixed
+    {
+        $current         = $this->including;
+        $this->including = false;
+        try {
+            $keys = array_reverse(array_filter(explode($this->delimiter, $id), 'strlen'));
+            return $this->factory($keys, $this->fetch($id), $dynamic);
+        }
+        finally {
+            $this->including = $current;
+        }
+    }
+
     public function set(string $id, $value): self
     {
         $values = [];

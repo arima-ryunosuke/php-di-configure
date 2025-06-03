@@ -7,6 +7,11 @@
 use ryunosuke\castella\Attribute\Entry;
 
 return [
+    'concat1'  => 1,
+    'concat2'  => 'parent2',
+    'concat3'  => static fn($c) => new class() {
+        public function __toString(): string { return 'parent3'; }
+    },
     'env'      => [
         'ip'        => $this->const('127.0.0.1', 'LOCAL_IP'),
         'name'      => 'local',

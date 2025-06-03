@@ -5,6 +5,9 @@
  */
 
 return [
+    'concat1'  => $this->raw('concat1') + 10,
+    'concat2'  => "{$this['concat2']}-child2",
+    'concat3'  => "{$this['concat3']}-child3",
     'env'      => [
         'loglevel'  => 'debug',
         'extension' => $this->array(['js']),

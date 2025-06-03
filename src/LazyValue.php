@@ -81,6 +81,11 @@ class LazyValue implements ArrayAccess
         return $this;
     }
 
+    public function __toString(): string
+    {
+        return $this->container->raw($this->id);
+    }
+
     public function offsetGet(mixed $offset): static
     {
         $this->lazy[] = [__FUNCTION__, [$offset]];

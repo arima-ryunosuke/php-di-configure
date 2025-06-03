@@ -460,7 +460,7 @@ class ContainerTest extends AbstractTestCase
         that($container->cache($cachefile, fn() => $this->fail('never called')))->is(true);
         that($container['direct'])->is(789);
         that($container->has('unset'))->is(false);
-        that($container['string'])->is('cache');
+        that($container['string'])->is('cache/child');
         that($container['float'])->is(M_PI);
         that($container['array'])->is(['a' => 'A', 'b' => 'B']);
         that($container['object']->name)->is('hoge');
@@ -469,7 +469,7 @@ class ContainerTest extends AbstractTestCase
         that($container['stdclass'])->is((object) ['x' => 'X']);
         that($container['callable'](2))->is(369);
         that($container['bound']())->method()->is('method');
-        that($container['anonymous']->string())->is('cache');
+        that($container['anonymous']->string())->is('cache/child');
         that($container['misc.alias'])->is('alias');
         that($container['A'])->is('alias');
         that($container['misc.empty'])->is([]);
@@ -1403,6 +1403,10 @@ class ContainerTest extends AbstractTestCase
         that(constant("LOCAL_IP"))->is("127.0.0.1");
         that(constant("DB_IP"))->is("127.0.0.2");
         that(constant("DATABASE\\CIP"))->is("127.0.0.3");
+
+        that($container['concat1'])->is(11);
+        that($container['concat2'])->is("parent2-child2");
+        that($container['concat3'])->is("parent3-child3");
 
         $env    = $container['env'];
         $logger = $env['logger'];
